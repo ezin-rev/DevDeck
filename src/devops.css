@@ -1,0 +1,46 @@
+/* ---------- DevOps tools (devops.jsx) ---------- */
+.tone-sky { --tone: var(--sky); }
+
+.ok-badge { background: #16a34a; color: #fff; }
+.no-badge { background: #dc2626; color: #fff; }
+.warn-badge { background: #d97706; color: #fff; }
+.note-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+
+/* Kubernetes form */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.form-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.form-field > span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.form-field .field { padding: 8px 10px; }
+
+/* Units */
+.unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.unit-cell { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--field); min-width: 0; }
+.unit-cell code { font-family: var(--mono); font-size: 14px; color: var(--text-strong); overflow-wrap: anywhere; }
+
+/* Version ranges */
+.ver-list { display: flex; flex-direction: column; gap: 4px; }
+.ver-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--field); font-size: 14px; }
+.ver-row code { font-family: var(--mono); }
+.ver-row.ok span { color: #16a34a; font-weight: 700; }
+.ver-row.no span { color: #dc2626; font-weight: 700; }
+:root[data-theme="dark"] .ver-row.ok span { color: #4ade80; }
+:root[data-theme="dark"] .ver-row.no span { color: #f87171; }
+.cmp-sign { font: 800 24px var(--mono); color: var(--text-strong); min-width: 28px; text-align: center; }
+.mono { font-family: var(--mono); }
+
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: 1fr; }
+}
+
+/* Certificates (certs.jsx) */
+.cert-answer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.cert-answer .badge { font-size: 13px; margin-left: auto; }
+.cert-chain { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+.cert-chain li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.cert-chain li::marker { color: var(--muted); }
+.cert-card { scroll-margin-top: 90px; }
+.cert-names { display: flex; flex-direction: column; gap: 6px; }
+.mono-chip { font-family: var(--mono); font-size: 13px; cursor: default; }
+.cert-ext summary { cursor: pointer; margin-bottom: 6px; }
+.cert-help { margin: 0; }
+.spin { animation: spin 0.9s linear infinite; }

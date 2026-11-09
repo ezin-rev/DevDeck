@@ -1,0 +1,13 @@
+{
+  "name": "DevDeck — friendly developer tools",
+  "short_name": "DevDeck",
+  "description": "Convert, encode, format, generate and DevOps tools that run entirely in your browser.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
