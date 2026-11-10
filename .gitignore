@@ -8,6 +8,7 @@
 /investigation.cany/
 /capture/
 /reference/
+questions.json
 
 # Dependencies and generated build output
 /node_modules/
