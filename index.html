@@ -2,21 +2,43 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Friendly everyday tools for developers and everyone: convert, encode, format, generate and compare text." />
     <title>DevDeck</title>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#000000" />
+    <!-- iPhone / iPad: open full-screen from the home screen, with the status bar over the page -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DevDeck" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <!-- Link previews (WhatsApp, LINE, Slack, Discord, Facebook, X, LinkedIn…). The build gives each page its own
+         title and description (scripts/routes.mjs) and makes these addresses absolute when SITE_URL is set. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DevDeck" />
+    <meta property="og:title" content="DevDeck — every little dev tool, in one friendly place" />
+    <meta property="og:description" content="Friendly everyday tools for developers and everyone: convert, encode, format, generate and compare text." />
+    <meta property="og:image" content="/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DevDeck — every little dev tool, in one friendly place" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DevDeck — every little dev tool, in one friendly place" />
+    <meta name="twitter:description" content="Friendly everyday tools for developers and everyone: convert, encode, format, generate and compare text." />
+    <meta name="twitter:image" content="/og-image.jpg" />
     <script>
       // Apply saved look before the page draws (same keys as src/prefs.jsx).
       try {
-        var p = Object.assign({ palette: "contrast", mode: "dark", nav: "tabs", view: "cards", panels: "side", density: "comfortable", text: "normal", width: "centered" }, JSON.parse(localStorage.getItem("aurora-prefs-v2") || "{}"));
+        var p = Object.assign({ palette: "contrast", mode: "dark", nav: "tabs", view: "cards", panels: "side", density: "comfortable", text: "normal", width: "centered", chrome: "full" }, JSON.parse(localStorage.getItem("aurora-prefs-v2") || "{}"));
         var d = p.mode === "dark" || (p.mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
         var ds = document.documentElement.dataset;
         ds.theme = d ? "dark" : "light"; ds.palette = p.palette; ds.fx = p.palette === "aurora" ? "vivid" : "soft";
-        ds.nav = p.nav; ds.view = p.view; ds.panels = p.panels; ds.density = p.density; ds.text = p.text; ds.width = p.width;
+        ds.nav = p.nav; ds.view = p.view; ds.panels = p.panels; ds.density = p.density; ds.text = p.text; ds.width = p.width; ds.chrome = p.chrome;
       } catch (e) {}
     </script>
   </head>

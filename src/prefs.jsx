@@ -9,7 +9,7 @@ export const THEMES = [
   { id: "ocean", name: "Harbor Blue", note: "Muted blues and teals", fx: "soft", swatch: ["#152029", "#f2f6f8", "#2f6f8f"] },
   { id: "rose", name: "Dusk Rose", note: "Gentle mauve and blush", fx: "soft", swatch: ["#231c1f", "#f8f4f5", "#a3566e"] },
   { id: "mono", name: "Ink & Paper", note: "Black and white, no colour", fx: "soft", swatch: ["#181818", "#fafafa", "#262626"] },
-  { id: "aurora", name: "Aurora Neon", note: "The original glowing look", fx: "vivid", swatch: ["#0a0d1a", "#f6f7fb", "#8b7dff"] },
+  { id: "aurora", name: "Neon Glow", note: "Purple and cyan with a soft moving glow", fx: "vivid", swatch: ["#0a0d1a", "#f6f7fb", "#8b7dff"] },
 ];
 
 export const LAYOUT_OPTIONS = [
@@ -20,24 +20,25 @@ export const LAYOUT_OPTIONS = [
   { key: "text", label: "Text size", hint: "Bigger text is easier to read", options: [["normal", "Normal"], ["large", "Large"]] },
   { key: "hero", label: "Welcome banner", hint: "The big search on the home page", options: [["show", "Show"], ["hide", "Hide"]] },
   { key: "width", label: "Page width", hint: "Centered column or edge to edge", options: [["centered", "Centered"], ["full", "Full width"]] },
+  { key: "chrome", label: "Top bar & headers", hint: "Full with icons and descriptions, or slim and minimal for more room", options: [["full", "Full"], ["slim", "Slim"]] },
 ];
 
 const LAYOUT_KEYS = LAYOUT_OPTIONS.map((o) => o.key);
 
 /* One-click layout presets: each sets every layout option at once. */
 export const LAYOUT_PRESETS = [
-  { id: "modern", name: "Modern web", note: "Top tabs, cards and a welcome search",
-    set: { nav: "tabs", view: "cards", panels: "side", density: "comfortable", text: "normal", hero: "show", width: "centered" } },
+  { id: "modern", name: "Modern web", note: "Top tabs with icons, cards and a welcome search",
+    set: { nav: "tabs", view: "cards", panels: "side", density: "comfortable", text: "normal", hero: "show", width: "centered", chrome: "full" } },
+  { id: "pro", name: "Compact", note: "Clean and dense: slim top bar, plain tabs, compact lists, small headers",
+    set: { nav: "tabs", view: "list", panels: "side", density: "compact", text: "normal", hero: "hide", width: "full", chrome: "slim" } },
   { id: "desktop", name: "Desktop app", note: "Side menu with every tool, like a desktop program",
-    set: { nav: "side", view: "cards", panels: "side", density: "comfortable", text: "normal", hero: "hide", width: "full" } },
+    set: { nav: "side", view: "cards", panels: "side", density: "comfortable", text: "normal", hero: "hide", width: "full", chrome: "full" } },
   { id: "workspace", name: "Dev workspace", note: "Slim icon bar, compact list, lots of room for work",
-    set: { nav: "rail", view: "list", panels: "side", density: "compact", text: "normal", hero: "hide", width: "full" } },
+    set: { nav: "rail", view: "list", panels: "side", density: "compact", text: "normal", hero: "hide", width: "full", chrome: "slim" } },
   { id: "launcher", name: "App launcher", note: "Big friendly tiles, like a phone home screen",
-    set: { nav: "tabs", view: "tiles", panels: "stacked", density: "comfortable", text: "normal", hero: "show", width: "centered" } },
-  { id: "easy", name: "Easy reading", note: "Larger text, roomy spacing, one box at a time",
-    set: { nav: "tabs", view: "cards", panels: "stacked", density: "comfortable", text: "large", hero: "show", width: "centered" } },
+    set: { nav: "tabs", view: "tiles", panels: "stacked", density: "comfortable", text: "normal", hero: "show", width: "centered", chrome: "full" } },
   { id: "focus", name: "Focus", note: "Just a search bar and a simple list, nothing else",
-    set: { nav: "minimal", view: "list", panels: "stacked", density: "compact", text: "normal", hero: "hide", width: "centered" } },
+    set: { nav: "minimal", view: "list", panels: "stacked", density: "compact", text: "normal", hero: "hide", width: "centered", chrome: "slim" } },
 ];
 
 export const presetFor = (prefs) => LAYOUT_PRESETS.find((p) => LAYOUT_KEYS.every((k) => p.set[k] === prefs[k]));

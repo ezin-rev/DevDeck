@@ -6,6 +6,8 @@ import "./styles.css";
 import "./power.css";
 import "./tools2.css";
 import "./devops.css";
+import "./more.css";
+import "./mobile.css";
 import App from "./App.jsx";
 
 createRoot(document.getElementById("root")).render(

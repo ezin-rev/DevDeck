@@ -11,6 +11,7 @@ import { navigate } from "./router.jsx";
 import { parseCsv, csvToJson, jsonToCsv, parseCron, describeCron, formatXml, ESCAPES, loadSql } from "./tools2.jsx";
 import { parseCidr, dockerRunToCompose, parseCurl, parseDotenv } from "./devops.jsx";
 import { certPreview } from "./certs.jsx";
+import { parse as tomlParse } from "smol-toml";
 
 // The SQL formatter is large, so it loads in the background; until then SQL previews show the query as typed.
 let sqlLib = null;
@@ -33,10 +34,10 @@ export function detect(raw) {
   if (/-----BEGIN (CERTIFICATE|CERTIFICATE REQUEST|NEW CERTIFICATE REQUEST)-----/.test(text)) {
     try {
       const isCsr = /BEGIN (NEW )?CERTIFICATE REQUEST/.test(text) && !/BEGIN CERTIFICATE-----/.test(text);
-      add({ type: isCsr ? "Certificate signing request" : "SSL/TLS certificate", tool: "/devops/cert-decoder", toolName: "Certificate Decoder", text, preview: certPreview(text) });
+      add({ type: isCsr ? "Certificate signing request" : "SSL/TLS certificate", tool: "/validators/cert-decoder", toolName: "Certificate Decoder", text, preview: certPreview(text) });
     } catch {}
   }
-  if (/-----BEGIN ([A-Z]+ )?PRIVATE KEY-----/.test(text)) add({ type: "Private key", tool: "/devops/cert-decoder", toolName: "Certificate Decoder", preview: "A private key — keep it secret. Open the Certificate Decoder to check it matches a certificate." });
+  if (/-----BEGIN ([A-Z]+ )?PRIVATE KEY-----/.test(text)) add({ type: "Private key", tool: "/validators/cert-decoder", toolName: "Certificate Decoder", preview: "A private key — keep it secret. Open the Certificate Decoder to check it matches a certificate." });
   // JWT
   if (/^[\w-]+\.[\w-]+\.[\w-]*$/.test(text)) {
     try {
@@ -115,19 +116,19 @@ export function detect(raw) {
   }
   // DevOps: IP ranges, docker run, curl, .env files, version ranges
   if (/^\d+\.\d+\.\d+\.\d+(\/\d{1,2})?$/.test(text)) {
-    try { const c = parseCidr(text); add({ type: text.includes("/") ? "IP range (CIDR)" : "IP address", tool: "/devops/cidr", toolName: "CIDR Calculator", text, preview: `${c.kind}\nRange: ${c.usable.toLocaleString()} usable addresses` }); } catch {}
+    try { const c = parseCidr(text); add({ type: text.includes("/") ? "IP range (CIDR)" : "IP address", tool: "/calculators/cidr", toolName: "CIDR Calculator", text, preview: `${c.kind}\nRange: ${c.usable.toLocaleString()} usable addresses` }); } catch {}
   }
   if (/^(sudo\s+)?(docker|podman)\s+(container\s+)?run\s/.test(text)) {
-    try { add({ type: "docker run command", tool: "/devops/docker-compose", toolName: "docker run → Compose", text, preview: dockerRunToCompose(text).yaml }); } catch {}
+    try { add({ type: "docker run command", tool: "/converters/docker-compose", toolName: "docker run → Compose", text, preview: dockerRunToCompose(text).yaml }); } catch {}
   }
   if (/^curl\s/.test(text)) {
-    try { const r = parseCurl(text); add({ type: "curl command", tool: "/devops/curl", toolName: "curl to Code", text, preview: `${r.method} ${r.url}${r.headers.length ? "\n" + r.headers.map(([k, v]) => `${k}: ${v}`).join("\n") : ""}` }); } catch {}
+    try { const r = parseCurl(text); add({ type: "curl command", tool: "/converters/curl", toolName: "curl to Code", text, preview: `${r.method} ${r.url}${r.headers.length ? "\n" + r.headers.map(([k, v]) => `${k}: ${v}`).join("\n") : ""}` }); } catch {}
   }
   if (text.includes("\n") && json === undefined) {
     const env = parseDotenv(text);
-    if (env.vars.length >= 2 && !env.problems.some((p) => p.startsWith("Line"))) add({ type: `.env file (${env.vars.length} variables)`, tool: "/devops/env", toolName: ".env Converter", text, preview: JSON.stringify(Object.fromEntries(env.vars.map((v) => [v.key, v.value])), null, 2) });
+    if (env.vars.length >= 2 && !env.problems.some((p) => p.startsWith("Line"))) add({ type: `.env file (${env.vars.length} variables)`, tool: "/converters/env", toolName: ".env Converter", text, preview: JSON.stringify(Object.fromEntries(env.vars.map((v) => [v.key, v.value])), null, 2) });
   }
-  if (/^(\^|~|>=|<=|>|<)\s*v?\d+(\.\d+){0,2}/.test(text)) add({ type: "Version range", tool: "/devops/semver", toolName: "Version Range Checker", text, preview: "Check which versions this range allows." });
+  if (/^(\^|~|>=|<=|>|<)\s*v?\d+(\.\d+){0,2}/.test(text)) add({ type: "Version range", tool: "/calculators/semver", toolName: "Version Range Checker", text, preview: "Check which versions this range allows." });
   // Image data address
   if (/^data:image\/[\w.+-]+;base64,/.test(text)) add({ type: "Image (Base64)", tool: "/encoders-decoders/image-base64", toolName: "Image <> Base64", text, preview: `An image of about ${Math.round(text.length * 0.75 / 1024)} KB, stored as text. Open it to see the picture.` });
   // SQL query
@@ -154,6 +155,16 @@ export function detect(raw) {
       add({ type: `CSV table (${rows.length - 1} rows)`, tool: "/converters/csv-json", toolName: "CSV <> JSON", text, preview: csvToJson(rows.slice(0, 4).map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(",")).join("\n")) + (rows.length > 4 ? "\n…" : "") });
     }
   }
+  // SSH public keys, ULIDs, TOML, Kubernetes and compose files, nginx configs
+  if (/^(ssh-(ed25519|rsa|dss)|ecdsa-sha2-nistp\d+|sk-\S+)\s+AAAA[\w+/=]+/.test(text)) add({ type: "SSH public key", tool: "/generators/ssh-key", toolName: "SSH Key Generator", text, preview: `${text.split(/\s+/)[0]} key${text.split(/\s+/)[2] ? ` for ${text.split(/\s+/).slice(2).join(" ")}` : ""}. Open it to see its fingerprint.` });
+  if (/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i.test(text) && !/^\d+$/.test(text)) add({ type: "ULID", tool: "/generators/ulid", toolName: "ULID Generator", preview: "A sortable ID with its creation time inside — open the ULID tool to read it." });
+  if (/^\s*\[[\w.-]+\]\s*$/m.test(text) && /^\s*[\w.-]+\s*=\s*\S/m.test(text) && json === undefined) {
+    try { add({ type: "TOML", tool: "/converters/toml", toolName: "TOML Converter", text, mode: "toml2json", preview: JSON.stringify(tomlParse(text), null, 2) }); } catch {}
+  }
+  if (/^kind:\s*Config\s*$/m.test(text) && /^clusters:/m.test(text)) add({ type: "kubeconfig", tool: "/validators/kubeconfig", toolName: "Kubeconfig Inspector", text, preview: "A Kubernetes login file — open it to see contexts, clusters and certificate expiry (it stays on your device)." });
+  else if (/^apiVersion:\s*\S+/m.test(text) && /^kind:\s*\w+/m.test(text)) add({ type: "Kubernetes YAML", tool: "/validators/k8s-validator", toolName: "Kubernetes Validator", text, preview: `Kubernetes ${[...text.matchAll(/^kind:\s*(\w+)/gm)].map((m) => m[1]).join(", ")} — open the validator to check it.` });
+  if (/^services:\s*$/m.test(text) && /^\s+(image|build):/m.test(text)) add({ type: "Docker Compose file", tool: "/validators/compose-validator", toolName: "Compose Validator", text, preview: "A compose file — open the validator to check it for mistakes." });
+  if (/^\s*(server|http|events|location\s+\S+)\s*\{/m.test(text) && /;\s*$/m.test(text)) add({ type: "nginx config", tool: "/formatters/nginx", toolName: "NGINX Formatter", text, preview: "An nginx configuration — open the formatter to tidy it." });
   // Anything else: plain text stats
   if (!out.length) {
     const words = (text.match(/\S+/g) || []).length;

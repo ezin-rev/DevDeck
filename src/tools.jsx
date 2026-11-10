@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { md5 } from "js-md5";
 import { diffWordsWithSpace, diffLines } from "diff";
 import { takeHandoff, peekHandoff } from "./handoff.js";
+import { CodeArea } from "./editor.jsx";
 
 /* ---------- shared bits ---------- */
 // Copy text, falling back to the older way where the clipboard API is blocked (e.g. plain http pages).
@@ -11,8 +12,9 @@ export async function copyText(value) {
   try { await navigator.clipboard.writeText(value); return true; } catch {}
   try {
     const t = document.createElement("textarea");
-    t.value = value; t.setAttribute("readonly", ""); t.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+    t.value = value; t.setAttribute("readonly", ""); t.style.cssText = "position:fixed;opacity:0;top:0;left:0;font-size:16px";
     document.body.appendChild(t); t.select();
+    t.setSelectionRange(0, value.length); // iPhone/iPad ignore select() alone
     const ok = document.execCommand("copy");
     t.remove();
     return ok;
@@ -56,15 +58,20 @@ export function Panel({ label, value, onChange, readOnly, error, rows = 10, mono
           <CopyButton value={value} />
         </div>
       </div>
-      <textarea
-        className={`field ${mono ? "mono" : ""} ${error ? "has-error" : ""}`}
-        value={value}
-        rows={rows}
-        readOnly={readOnly}
-        spellCheck={false}
-        onChange={(e) => onChange?.(e.target.value)}
-        placeholder={readOnly ? "" : "Type or paste here…"}
-      />
+      {mono ? (
+        <CodeArea className={error ? "has-error" : ""} value={value} rows={rows} readOnly={readOnly} onChange={onChange} placeholder={readOnly ? "" : "Type or paste here…"} aria-label={label} />
+      ) : (
+        <textarea
+          className={`field ${error ? "has-error" : ""}`}
+          value={value}
+          rows={rows}
+          readOnly={readOnly}
+          spellCheck={false}
+          onChange={(e) => onChange?.(e.target.value)}
+          placeholder={readOnly ? "" : "Type or paste here…"}
+          aria-label={label}
+        />
+      )}
       {error && <p className="error">{error}</p>}
     </div>
   );
@@ -203,8 +210,117 @@ export function relTime(diff) {
   for (const [u, size] of units) if (Math.abs(diff) >= size || u === "second") return rtf.format(Math.round(diff / size), u);
 }
 
+// ---- signing and checking JWTs with the browser's Web Crypto ----
+const JWT_ALGS = {
+  HS256: ["hmac", "SHA-256"], HS384: ["hmac", "SHA-384"], HS512: ["hmac", "SHA-512"],
+  RS256: ["rsa", "SHA-256"], RS384: ["rsa", "SHA-384"], RS512: ["rsa", "SHA-512"],
+  PS256: ["pss", "SHA-256"], PS384: ["pss", "SHA-384"], PS512: ["pss", "SHA-512"],
+  ES256: ["ec", "SHA-256", "P-256"], ES384: ["ec", "SHA-384", "P-384"], ES512: ["ec", "SHA-512", "P-521"],
+};
+const b64url = (bytes) => { let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b))); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const fromB64url = (s) => { const c = s.replace(/-/g, "+").replace(/_/g, "/"); return Uint8Array.from(atob(c + "===".slice((c.length + 3) % 4)), (ch) => ch.charCodeAt(0)); };
+const pemDer = (text, want) => {
+  const m = text.match(/-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!m) throw new Error(`Paste a PEM key (-----BEGIN ${want}-----).`);
+  return { label: m[1], der: fromB64url(m[2].replace(/\s+/g, "").replace(/\+/g, "-").replace(/\//g, "_")) };
+};
+function jwtKeyAlg(alg) {
+  const [kind, hash, curve] = JWT_ALGS[alg] || [];
+  if (!kind) throw new Error(`${alg} isn’t supported here.`);
+  if (kind === "hmac") return [{ name: "HMAC", hash }, { name: "HMAC" }];
+  if (kind === "rsa") return [{ name: "RSASSA-PKCS1-v1_5", hash }, { name: "RSASSA-PKCS1-v1_5" }];
+  if (kind === "pss") return [{ name: "RSA-PSS", hash }, { name: "RSA-PSS", saltLength: { "SHA-256": 32, "SHA-384": 48, "SHA-512": 64 }[hash] }];
+  return [{ name: "ECDSA", namedCurve: curve }, { name: "ECDSA", hash }];
+}
+export async function signJwt(alg, header, payload, key) {
+  if (!crypto.subtle) throw new Error("Signing needs a secure (https) page.");
+  const input = `${b64url(new TextEncoder().encode(JSON.stringify({ ...header, alg })))}.${b64url(new TextEncoder().encode(JSON.stringify(payload)))}`;
+  const [keyAlg, signAlg] = jwtKeyAlg(alg);
+  let k;
+  if (keyAlg.name === "HMAC") k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), keyAlg, false, ["sign"]);
+  else {
+    const { label, der } = pemDer(key, "PRIVATE KEY");
+    if (label !== "PRIVATE KEY") throw new Error(`This key is “${label}”. Convert it first: openssl pkcs8 -topk8 -nocrypt -in key.pem`);
+    k = await crypto.subtle.importKey("pkcs8", der, keyAlg, false, ["sign"]);
+  }
+  return `${input}.${b64url(new Uint8Array(await crypto.subtle.sign(signAlg, k, new TextEncoder().encode(input))))}`;
+}
+export async function verifyJwt(token, alg, key) {
+  const [h, p, sig] = token.split(".");
+  const [keyAlg, signAlg] = jwtKeyAlg(alg);
+  let k;
+  if (keyAlg.name === "HMAC") k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), keyAlg, false, ["verify"]);
+  else {
+    let { label, der } = pemDer(key, "PUBLIC KEY");
+    if (label === "CERTIFICATE") der = (await import("./certs-core.js")).parseCertificate(der).key.spki;
+    else if (label !== "PUBLIC KEY") throw new Error("Paste the public key (-----BEGIN PUBLIC KEY-----) or the certificate.");
+    k = await crypto.subtle.importKey("spki", der, keyAlg, false, ["verify"]);
+  }
+  return crypto.subtle.verify(signAlg, k, fromB64url(sig || ""), new TextEncoder().encode(`${h}.${p}`));
+}
+
 function JwtTool() {
-  const [token, setToken] = useState(() => takeHandoff("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"));
+  const [mode, setMode] = useState("decode");
+  const [handed, setHanded] = useState(null);
+  return (
+    <>
+      <Options>
+        <Segmented label="Mode" value={mode} onChange={setMode} options={[["decode", "Decode & verify"], ["encode", "Create / sign"]]} />
+      </Options>
+      {mode === "decode" ? <JwtDecoder initial={handed} /> : <JwtEncoder onMade={(t) => { setHanded(t); setMode("decode"); }} />}
+    </>
+  );
+}
+
+function JwtEncoder({ onMade }) {
+  const [alg, setAlg] = useState("HS256");
+  const [payload, setPayload] = useState(() => JSON.stringify({ sub: "user-42", name: "Alex", role: "admin", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }, null, 2));
+  const [extraHeader, setExtraHeader] = useState('{\n  "typ": "JWT"\n}');
+  const [key, setKey] = useState("my-very-secret-key-at-least-32-chars!");
+  const [out, setOut] = useState({ token: "", err: "" });
+  const hmac = alg.startsWith("HS");
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const pl = JSON.parse(payload), hd = JSON.parse(extraHeader || "{}");
+        const token = await signJwt(alg, hd, pl, key);
+        if (live) setOut({ token, err: "" });
+      } catch (e) { if (live) setOut({ token: "", err: e.message || "Couldn’t sign the token." }); }
+    })();
+    return () => { live = false; };
+  }, [alg, payload, extraHeader, key]);
+  const bump = (k, secs) => { try { const p = JSON.parse(payload); p[k] = Math.floor(Date.now() / 1000) + secs; setPayload(JSON.stringify(p, null, 2)); } catch { /* fix the JSON first */ } };
+  return (
+    <>
+      <div className="options-row">
+        <label className="check">Algorithm <select className="field small-select" value={alg} onChange={(e) => { const a = e.target.value; setAlg(a); if (a.startsWith("HS") !== hmac) setKey(a.startsWith("HS") ? "my-very-secret-key-at-least-32-chars!" : ""); }}>{Object.keys(JWT_ALGS).map((a) => <option key={a}>{a}</option>)}</select></label>
+        <span className="muted small">Times:</span>
+        <button className="chip" onClick={() => bump("iat", 0)}>Issued now</button>
+        <button className="chip" onClick={() => bump("exp", 3600)}>Expires in 1 hour</button>
+        <button className="chip" onClick={() => bump("exp", 86400)}>in 1 day</button>
+        <button className="chip" onClick={() => bump("exp", -60)}>Already expired</button>
+      </div>
+      <div className="split">
+        <Panel label="Payload (claims)" value={payload} onChange={setPayload} rows={10} />
+        <div className="panel">
+          <span className="panel-label">{hmac ? "Secret" : `Private key (PKCS#8 PEM, ${alg.startsWith("ES") ? `EC ${JWT_ALGS[alg][2]}` : "RSA"})`}</span>
+          <textarea className="field mono" rows={hmac ? 2 : 6} value={key} onChange={(e) => setKey(e.target.value)} spellCheck={false} placeholder={hmac ? "Shared secret" : "-----BEGIN PRIVATE KEY-----"} />
+          {hmac && key && new TextEncoder().encode(key).length < { HS256: 32, HS384: 48, HS512: 64 }[alg] && <p className="muted small">Tip: secrets shorter than {{ HS256: 32, HS384: 48, HS512: 64 }[alg]} characters are easier to guess.</p>}
+          {!hmac && <p className="muted small">Need a key? Make one with the RSA Generator or Certificate Generator.</p>}
+          <span className="panel-label">Extra header fields</span>
+          <textarea className="field mono" rows={3} value={extraHeader} onChange={(e) => setExtraHeader(e.target.value)} spellCheck={false} />
+        </div>
+      </div>
+      <Panel label="Signed token" value={out.token} readOnly rows={4} error={out.err}
+        extra={out.token && <button className="btn ghost" onClick={() => onMade(out.token)}>Decode it</button>} />
+      <p className="muted small">Signed in your browser; the secret or key never leaves your device.</p>
+    </>
+  );
+}
+
+function JwtDecoder({ initial }) {
+  const [token, setToken] = useState(() => initial || takeHandoff("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"));
   const parts = useMemo(() => {
     // Accept a whole "Authorization: Bearer …" line as well as the bare token.
     const clean = token.trim().replace(/^(authorization:\s*)?bearer\s+/i, "");
@@ -224,6 +340,14 @@ function JwtTool() {
       };
     } catch (e) { return { header: "", payload: "", sig: "", err: e.message || "This doesn’t look like a valid token.", claims: {} }; }
   }, [token]);
+  const [vkey, setVkey] = useState("");
+  const [verified, setVerified] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (!vkey.trim() || !parts.alg || parts.err) { setVerified(null); return; }
+    verifyJwt(token.trim().replace(/^(authorization:\s*)?bearer\s+/i, ""), parts.alg, vkey.trim()).then((ok) => live && setVerified(ok ? "ok" : "bad"), (e) => live && setVerified(e.message || "Couldn’t check with this key."));
+    return () => { live = false; };
+  }, [token, vkey, parts]);
   const now = Date.now();
   const dates = [["iat", "Issued"], ["nbf", "Usable from"], ["exp", "Expires"]].filter(([k]) => typeof parts.claims[k] === "number");
   const { exp, nbf } = parts.claims;
@@ -257,7 +381,21 @@ function JwtTool() {
               })}
             </div>
           )}
-          <p className="muted small">The signature isn’t checked here: decoding only shows what the token says, not whether it’s genuine.</p>
+        </div>
+      )}
+      {parts.alg && parts.alg !== "none" && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-label">Check the signature</span>
+            <div className="panel-actions">
+              {verified === "ok" && <span className="badge ok-badge">Signature is valid</span>}
+              {verified === "bad" && <span className="badge no-badge">Signature doesn’t match</span>}
+            </div>
+          </div>
+          <textarea className="field mono" rows={parts.alg.startsWith("HS") ? 1 : 4} value={vkey} onChange={(e) => setVkey(e.target.value)} spellCheck={false}
+            placeholder={parts.alg.startsWith("HS") ? "The shared secret" : "The public key (-----BEGIN PUBLIC KEY-----) or the certificate"} />
+          {verified && verified !== "ok" && verified !== "bad" && <p className="error">{verified}</p>}
+          {!vkey && <p className="muted small">Without a {parts.alg.startsWith("HS") ? "secret" : "public key"}, decoding only shows what the token says, not whether it’s genuine. Checked in your browser.</p>}
         </div>
       )}
       <div className="split">
@@ -363,35 +501,65 @@ async function sha(algo, text) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32hex = (bytes) => { let c = 0xffffffff; for (let i = 0; i < bytes.length; i++) c = CRC_T[(c ^ bytes[i]) & 0xff] ^ (c >>> 8); return ((c ^ 0xffffffff) >>> 0).toString(16).padStart(8, "0"); };
+async function hashBytes(bytes) {
+  const [s1, s256, s384, s512] = await Promise.all(["SHA-1", "SHA-256", "SHA-384", "SHA-512"].map((a) => (crypto.subtle ? crypto.subtle.digest(a, bytes).then((b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("")) : "")));
+  return { MD5: md5(bytes), SHA1: s1, SHA256: s256, SHA384: s384, SHA512: s512, CRC32: crc32hex(bytes) };
+}
+
 function HashTool() {
+  const [mode, setMode] = useState("text");
   const [input, setInput] = useState(() => takeHandoff("Hello, world"));
+  const [file, setFile] = useState(null);
   const [upper, setUpper] = useState(false);
   const [hashes, setHashes] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [expect, setExpect] = useState("");
   useEffect(() => {
     let live = true;
-    Promise.all([sha("SHA-1", input), sha("SHA-256", input), sha("SHA-512", input)]).then(([s1, s256, s512]) => {
-      if (live) setHashes({ MD5: md5(input), SHA1: s1, SHA256: s256, SHA512: s512 });
-    });
+    (async () => {
+      if (mode === "file" && !file) return setHashes({});
+      setBusy(mode === "file");
+      const bytes = mode === "text" ? new TextEncoder().encode(input) : new Uint8Array(await file.arrayBuffer());
+      const h = await hashBytes(bytes);
+      if (live) { setHashes(h); setBusy(false); }
+    })();
     return () => { live = false; };
-  }, [input]);
+  }, [input, file, mode]);
+  const want = expect.trim().toLowerCase().replace(/^(sha\d+|md5)[:=\s]+/, "").replace(/[\s:]/g, "");
+  const match = want ? Object.entries(hashes).find(([, v]) => v && v === want) : null;
   return (
     <>
       <Options>
+        <Segmented label="Hash" value={mode} onChange={setMode} options={[["text", "Text"], ["file", "A file (checksum)"]]} />
         <label className="check"><input type="checkbox" checked={upper} onChange={(e) => setUpper(e.target.checked)} /> Uppercase</label>
       </Options>
-      <Panel label="Text" value={input} onChange={setInput} rows={6} mono={false} />
+      {mode === "text" ? <Panel label="Text" value={input} onChange={setInput} rows={6} mono={false} /> : (
+        <label className="dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); }}>
+          <strong>{file ? `${file.name} — ${file.size.toLocaleString()} bytes` : "Drop a file here, or click to choose one"}</strong>
+          <span className="muted small">{busy ? "Calculating…" : "Hashed in your browser — the file isn’t uploaded"}</span>
+          <input type="file" hidden onChange={(e) => e.target.files[0] && setFile(e.target.files[0])} />
+        </label>
+      )}
+      <div className="panel">
+        <span className="panel-label">Compare with an expected checksum (e.g. from a download page)</span>
+        <input className={`field mono ${want && !match ? "has-error" : ""}`} value={expect} onChange={(e) => setExpect(e.target.value)} placeholder="Paste the checksum you were given" aria-label="Expected checksum" />
+        {want && (match ? <p><span className="badge ok-badge">Match</span> It’s the same {match[0]} — the {mode === "file" ? "file" : "text"} hasn’t changed.</p> : <p className="error">No match — the {mode === "file" ? "file is different or was damaged" : "text is different"}, or the checksum uses another method.</p>)}
+      </div>
       <div className="result-list">
         {Object.entries(hashes).map(([k, v]) => {
           const val = upper ? v.toUpperCase() : v;
           return (
-            <div className="result" key={k}>
+            <div className={`result ${match?.[0] === k ? "matched" : ""}`} key={k}>
               <span className="panel-label">{k}</span>
-              <code>{val}</code>
+              <code>{val || "—"}</code>
               <CopyButton value={val} />
             </div>
           );
         })}
       </div>
+      {mode === "file" && <p className="muted small">Same in a terminal: <code>shasum -a 256 file</code> (macOS/Linux) or <code>Get-FileHash file</code> (Windows).</p>}
     </>
   );
 }
@@ -454,26 +622,53 @@ export const CASES = [
   ["CONSTANT_CASE", (s) => words(s).map((w) => w.toUpperCase()).join("_")],
 ];
 
+const lineFn = (f) => (t) => f(t.split(/\r?\n/)).join("\n");
+const TEXT_UTILS = [
+  ["Trim lines", lineFn((l) => l.map((x) => x.trim()))],
+  ["Remove empty lines", lineFn((l) => l.filter((x) => x.trim()))],
+  ["Remove duplicate lines", lineFn((l) => [...new Set(l)])],
+  ["Sort A → Z", lineFn((l) => [...l].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })))],
+  ["Sort Z → A", lineFn((l) => [...l].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })))],
+  ["Reverse lines", lineFn((l) => [...l].reverse())],
+  ["Shuffle lines", lineFn((l) => { const a = [...l]; for (let i = a.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; })],
+  ["Number lines", lineFn((l) => l.map((x, i) => `${i + 1}. ${x}`))],
+  ["Join into one line", (t) => t.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).join(" ")],
+  ["Remove extra spaces", (t) => t.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").trim()],
+  ["Remove HTML tags", (t) => t.replace(/<[^>]*>/g, "")],
+  ["Reverse text", (t) => [...t].reverse().join("")],
+];
+
 function TextInspector() {
   const [text, setText] = useState(() => takeHandoff("Hello friendly world. This tool counts words and changes case!"));
   const [before, setBefore] = useState(null);
+  const wordList = text.toLowerCase().match(/[\p{L}\p{N}'’-]+/gu) || [];
   const stats = [
     ["Characters", [...text].length],
+    ["Without spaces", [...text.replace(/\s/g, "")].length],
     ["Words", (text.match(/\S+/g) || []).length],
+    ["Different words", new Set(wordList).size],
     ["Lines", text ? text.split(/\r?\n/).length : 0],
+    ["Paragraphs", text.split(/\n\s*\n/).filter((p) => p.trim()).length],
     ["Sentences", (text.match(/[^.!?]+[.!?]+/g) || []).length],
-    ["Bytes", new TextEncoder().encode(text).length],
+    ["Bytes (UTF-8)", new TextEncoder().encode(text).length],
+    ["Reading time", `${Math.max(1, Math.round(wordList.length / 230))} min`],
   ];
+  const freq = Object.entries(wordList.reduce((m, w) => ((m[w] = (m[w] || 0) + 1), m), {})).filter(([w]) => w.length > 3).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const apply = (fn) => { const next = fn(text); if (next !== text) { setBefore(text); setText(next); } };
   return (
     <>
       <Options>
-        {CASES.map(([name, fn]) => <button key={name} className="btn" onClick={() => { const next = fn(text); if (next !== text) { setBefore(text); setText(next); } }}>{name}</button>)}
+        {CASES.map(([name, fn]) => <button key={name} className="btn" onClick={() => apply(fn)}>{name}</button>)}
         <button className="btn" onClick={() => { setText(before); setBefore(null); }} disabled={before === null}><Undo2 size={16} /> Undo</button>
       </Options>
+      <div className="options"><span className="panel-label">Utilities</span><div className="options-row">
+        {TEXT_UTILS.map(([name, fn]) => <button key={name} className="btn" onClick={() => apply(fn)}>{name}</button>)}
+      </div></div>
       <div className="stats">
         {stats.map(([k, v]) => <div className="stat" key={k}><strong>{v}</strong><span>{k}</span></div>)}
       </div>
       <Panel label="Text" value={text} onChange={(v) => { setText(v); setBefore(null); }} rows={12} mono={false} />
+      {freq.length > 0 && <div className="options-row"><span className="muted small">Most used words:</span>{freq.map(([w, n]) => <span key={w} className="chip">{w} <strong>×{n}</strong></span>)}</div>}
     </>
   );
 }

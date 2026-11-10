@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { House, Search, Settings, Star, History, WandSparkles, Palette as PaletteIcon, LayoutDashboard, Sparkles, ArrowRight, ArrowUpRight, ChevronRight, ChevronDown, ShieldCheck, CornerDownLeft, X } from "lucide-react";
-import { GROUPS, ALL_TOOLS } from "./data.js";
-import { usePath, Link, navigate } from "./router.jsx";
+import { House, Search, Settings, Star, History, WandSparkles, LayoutDashboard, Github, Sparkles, ArrowRight, ArrowUpRight, ChevronRight, ChevronDown, ShieldCheck, CornerDownLeft, X, SquareArrowOutUpRight, PictureInPicture2, Puzzle, Code } from "lucide-react";
+import { GROUPS, ALL_TOOLS, TOOL_SETS } from "./data.js";
+import { createRoot } from "react-dom/client";
+import { usePath, Link, navigate, href } from "./router.jsx";
 import { sendTo } from "./handoff.js";
-import { usePins, useRecent, togglePin, markUsed, clearRecent } from "./store.js";
+import { usePins, useRecent, togglePin, markUsed, clearRecent, useHidden, setHidden, toggleHidden, useCodeEditor, setCodeEditor } from "./store.js";
 import { usePrefs, ThemePicker, LayoutPicker } from "./prefs.jsx";
 
 const byPath = (p) => ALL_TOOLS.find((t) => t.path === p);
@@ -12,8 +13,11 @@ const byPath = (p) => ALL_TOOLS.find((t) => t.path === p);
 // They are fetched once (in the background after the page settles, or when a tool is opened).
 let viewsPromise = null;
 const loadViews = () => (viewsPromise ||= Promise.all([
-  import("./tools.jsx"), import("./power.jsx"), import("./tools2.jsx"), import("./devops.jsx"), import("./certs.jsx"),
-]).then(([a, b, c, d, e]) => ({ ...a.TOOL_VIEWS, ...b.POWER_VIEWS, ...c.MORE_VIEWS, ...d.DEVOPS_VIEWS, ...e.CERT_VIEWS })));
+  import("./tools.jsx").then((m) => m.TOOL_VIEWS), import("./power.jsx").then((m) => m.POWER_VIEWS), import("./tools2.jsx").then((m) => m.MORE_VIEWS),
+  import("./devops.jsx").then((m) => m.DEVOPS_VIEWS), import("./certs.jsx").then((m) => m.CERT_VIEWS), import("./data-tools.jsx").then((m) => m.DATA_VIEWS),
+  import("./more-tools.jsx").then((m) => m.MORE_TOOL_VIEWS), import("./media.jsx").then((m) => m.MEDIA_VIEWS), import("./net.jsx").then((m) => m.NET_VIEWS),
+  import("./ops.jsx").then((m) => m.OPS_VIEWS), import("./keys.jsx").then((m) => m.KEY_VIEWS),
+]).then((all) => Object.assign({}, ...all)));
 const lazyViews = {};
 const viewFor = (path) => (lazyViews[path] ||= lazy(() => loadViews().then((v) => ({ default: v[path] || (() => null) }))));
 
@@ -24,12 +28,16 @@ function ToolLoading() {
 const BLURBS = {
   power: "Things DevToys can’t do: smart detection and chaining tools together.",
   reference: "Quick look-ups you need while building for the web.",
-  devops: "Networks, certificates, containers, Kubernetes, config files and uptime — the everyday DevOps toolbox.",
-  converters: "Turn data from one format into another.",
+  validators: "Check files and certificates for mistakes, and see what’s inside them.",
+  calculators: "Work out network ranges, sizes and transfer times, uptime and version ranges.",
+  converters: "Turn data, commands and config files from one format into another.",
   "encoders-decoders": "Make text safe for the web, or read it back.",
   formatters: "Tidy up messy data so it’s easy to read.",
-  generators: "Create hashes, IDs, passwords and placeholder data in one click.",
-  text: "Count, change case, compare and search text.",
+  generators: "Create hashes, IDs, passwords, keys, certificates and placeholder data in one click.",
+  text: "Count, clean up, compare, de-duplicate and translate text.",
+  data: "Query, validate, compare and convert JSON, YAML and XML — and turn JSON into code.",
+  network: "Talk to APIs, WebSockets and DNS, and check ports — the tools that reach out to the network.",
+  files: "Convert, compress and check images, and split big files.",
 };
 
 // Search by words in any order ("format json" finds the JSON Formatter), including nicknames
@@ -41,11 +49,15 @@ const SEARCH_INDEX = ALL_TOOLS.map((t) => ({
   fields: [[splitWords(`${t.title} ${t.short} ${t.short.replace(/\s+/g, "")}`), 4], [splitWords(t.words), 3], [splitWords(t.group.title), 2], [splitWords(t.desc), 1]],
 }));
 
-function filterTools(q) {
+// Tools the visitor switched off in Settings → Manage tools are left out of lists and search.
+const visibleIn = (group, hidden) => group.tools.filter((t) => !hidden.includes(`/${group.id}/${t.id}`));
+
+function filterTools(q, hidden = []) {
   const terms = splitWords(q);
-  if (!terms.length) return ALL_TOOLS;
+  if (!terms.length) return ALL_TOOLS.filter((t) => !hidden.includes(t.path));
   const scored = [];
   for (const { tool, fields } of SEARCH_INDEX) {
+    if (hidden.includes(tool.path)) continue;
     let score = 0;
     const all = terms.every((term) => {
       const s = stem(term);
@@ -69,6 +81,9 @@ const isTyping = () => { const el = document.activeElement; return !!el && (["IN
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+// Where DevDeck's source lives (credited in the footer and on the Settings page).
+const REPO_URL = "https://github.com/ezin-rev/devdeck";
+
 /* ---------- pop-up menus ---------- */
 function MenuButton({ icon: Icon, label, title, children }) {
   const [open, setOpen] = useState(false);
@@ -77,9 +92,9 @@ function MenuButton({ icon: Icon, label, title, children }) {
     if (!open) return;
     const onDown = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
     const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
+    document.addEventListener("pointerdown", onDown); // pointer events cover mouse, touch and pen
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
   }, [open]);
   return (
     <div className="menu" ref={ref}>
@@ -105,13 +120,34 @@ const tabActive = (t, path) => (t.id ? path === `/${t.id}` || path.startsWith(`/
 
 function TopBar({ path, prefsApi, openPalette }) {
   const { prefs, set, reset, applyPreset } = prefsApi;
+  // On phones and tablets the tab bar scrolls sideways: keep the current group's tab in view.
+  const tabsRef = useRef(null);
+  useEffect(() => {
+    const bar = tabsRef.current, tab = bar?.querySelector(".tab.active");
+    if (!bar || !tab || bar.scrollWidth <= bar.clientWidth) return;
+    const b = bar.getBoundingClientRect(), t = tab.getBoundingClientRect();
+    bar.scrollTo({ left: bar.scrollLeft + (t.left - b.left) - (b.width - t.width) / 2, behavior: "smooth" });
+  }, [path]);
+  // Soft fade on an edge when more tabs are hidden that way (narrow windows, phones, tablets).
+  const [edges, setEdges] = useState("");
+  useEffect(() => {
+    const bar = tabsRef.current;
+    if (!bar) return;
+    const update = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      setEdges(`${bar.scrollLeft > 4 ? "fade-left" : ""} ${bar.scrollLeft < max - 4 ? "fade-right" : ""}`.trim());
+    };
+    update();
+    bar.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => { bar.removeEventListener("scroll", update); window.removeEventListener("resize", update); };
+  }, []);
   return (
     <header className="topbar">
       <div className="topbar-row">
         <Link to="/" className="logo">
           <span className="logo-mark"><Sparkles size={16} /></span>
           <span>DevDeck</span>
-          <span className="logo-pill">Aurora</span>
         </Link>
         {/* A real search form: focusing or typing opens the quick-search palette. */}
         <form className="search-trigger" aria-label="Search tools" onSubmit={(e) => { e.preventDefault(); openPalette(); }} onClick={() => openPalette()}>
@@ -128,89 +164,31 @@ function TopBar({ path, prefsApi, openPalette }) {
           <kbd>{isMac ? "⌘" : "Ctrl"} K</kbd>
         </form>
         <div className="top-actions">
-          <MenuButton icon={PaletteIcon} label="Theme menu" title="Theme">
-            <ThemePicker prefs={prefs} set={set} />
-          </MenuButton>
           <MenuButton icon={LayoutDashboard} label="Layout menu" title="Layout">
             <LayoutPicker prefs={prefs} set={set} reset={reset} applyPreset={applyPreset} />
           </MenuButton>
           <Link to="/settings" className="round-btn" title="Settings"><Settings size={18} /><span className="sr-only">Settings</span></Link>
         </div>
       </div>
-      <nav className="tabs" aria-label="Tool groups">
+      <nav className={`tabs ${edges}`} aria-label="Tool groups" ref={tabsRef}>
+        {/* One row of rounded tabs, each with its group's icon; each group's page lists its tools. */}
         {TABS.map((t) => {
           const to = t.id ? `/${t.id}` : "/";
           const active = tabActive(t, path);
           const Icon = t.icon;
-          const group = GROUPS.find((g) => g.id === t.id);
-          const link = (
-            <Link key={to} to={to} className={`tab tone-${t.tone} ${active ? "active" : ""} ${group ? "has-menu" : ""}`} aria-current={active ? "page" : undefined}>
-              <Icon size={15} /> {t.title}
+          return (
+            <Link key={to} to={to} title={t.tab && t.tab !== t.title ? t.title : undefined} className={`tab tone-${t.tone} ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+              <Icon size={15} /> {t.tab || t.title}
             </Link>
           );
-          return group ? <span key={to} className={`tab-wrap ${active ? "active" : ""}`}>{link}<TabMenu group={group} path={path} active={active} /></span> : link;
         })}
       </nav>
     </header>
   );
 }
 
-/* Drop-down list of a group's tools, opened from the small arrow next to each tab. */
-function TabMenu({ group, path, active }) {
-  const [pos, setPos] = useState(null);
-  const btn = useRef(null);
-  const panel = useRef(null);
-  const open = !!pos;
-  const toggle = () => {
-    if (open) return setPos(null);
-    const r = btn.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 8, left: Math.max(8, Math.min(r.right - 280, window.innerWidth - 288)) });
-  };
-  useEffect(() => {
-    if (!open) return;
-    const close = (e) => { if (!btn.current?.contains(e.target) && !panel.current?.contains(e.target)) setPos(null); };
-    const onKey = (e) => { if (e.key === "Escape") setPos(null); };
-    const onMove = () => setPos(null);
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", onMove);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); window.removeEventListener("resize", onMove); };
-  }, [open]);
-  useEffect(() => setPos(null), [path]);
-  const id = `tabmenu-${group.id}`;
-  return (
-    <>
-      <button
-        ref={btn}
-        className={`tab tab-caret tone-${group.tone} ${active ? "active" : ""} ${open ? "open" : ""}`}
-        aria-expanded={open}
-        aria-controls={id}
-        aria-haspopup="true"
-        aria-label="toggle open/close state of the tool group"
-        title={`${group.title} tools`}
-        onClick={toggle}
-      >
-        <ChevronDown size={14} />
-      </button>
-      {open && (
-        <div ref={panel} id={id} className={`tab-menu tone-${group.tone}`} style={{ top: pos.top, left: pos.left }} role="menu" aria-label={`${group.title} tools`}>
-          {group.tools.map((tool) => {
-            const TIcon = tool.icon;
-            const tp = `/${group.id}/${tool.id}`;
-            return (
-              <Link key={tp} to={tp} role="menuitem" className={`tab-menu-item ${path === tp ? "active" : ""}`}>
-                <span className="mini-tile"><TIcon size={15} /></span>
-                <span className="tab-menu-text"><strong>{tool.title}</strong><span>{tool.desc}</span></span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </>
-  );
-}
-
 function SideNav({ path }) {
+  const hidden = useHidden();
   return (
     <aside className="sidenav" aria-label="All tools by group">
       {TABS.map((t) => {
@@ -224,7 +202,7 @@ function SideNav({ path }) {
             </Link>
             {group && (
               <ul className="side-tools">
-                {group.tools.map((tool) => {
+                {visibleIn(group, hidden).map((tool) => {
                   const tp = `/${group.id}/${tool.id}`;
                   return <li key={tp}><Link to={tp} className={`side-tool ${path === tp ? "active" : ""}`}>{tool.short}</Link></li>;
                 })}
@@ -245,12 +223,13 @@ function Palette({ open, onClose }) {
   const listRef = useRef(null);
   const pins = usePins();
   const recent = useRecent();
+  const hidden = useHidden();
   const results = useMemo(() => {
-    const r = filterTools(q);
+    const r = filterTools(q, hidden);
     if (q.trim()) return r;
     const first = [...new Set([...pins, ...recent])].map(byPath).filter(Boolean);
     return [...first, ...r.filter((t) => !first.includes(t))];
-  }, [q, pins, recent]);
+  }, [q, pins, recent, hidden]);
   useEffect(() => { if (open) { setQ(""); setSel(0); setTimeout(() => inputRef.current?.focus(), 0); } }, [open]);
   useEffect(() => setSel(0), [q]);
   // Keep the highlighted result visible while moving with the arrow keys.
@@ -258,8 +237,8 @@ function Palette({ open, onClose }) {
   if (!open) return null;
   const go = (t) => { onClose(); navigate(t.path); };
   return (
-    <div className="palette-backdrop" onMouseDown={onClose}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Search tools" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="palette-backdrop" onPointerDown={onClose}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Search tools" onPointerDown={(e) => e.stopPropagation()}>
         <div className="palette-input">
           <Search size={18} />
           <input
@@ -322,7 +301,7 @@ function ToolCard({ tool }) {
       <Link to={tool.path} className={`tcard tone-${tool.group.tone}`}>
         <span className="tile"><Icon size={26} /></span>
         <span className="tcard-body">
-          <h3>{tool.title}{tool.isNew && <span className="new-badge">New</span>}</h3>
+          <h3>{tool.title}</h3>
           <p>{tool.desc}</p>
         </span>
         <ArrowUpRight size={18} className="tcard-arrow" />
@@ -357,7 +336,8 @@ function Home({ openPalette, showHero }) {
     try { localStorage.setItem("aurora-collapsed", JSON.stringify(next)); } catch {}
     return next;
   });
-  const tools = filterTools(q);
+  const hidden = useHidden();
+  const tools = filterTools(q, hidden);
   const pins = usePins();
   const recent = useRecent();
   // Paste anywhere on the home page (outside a text box) to run Smart Paste.
@@ -393,7 +373,7 @@ function Home({ openPalette, showHero }) {
         </div>
         <Link to="/power/smart-paste" className="smart-cta">
           <WandSparkles size={18} />
-          <span><strong>New: Smart Paste</strong> — paste anything (a token, JSON, a date, Base64…) and we’ll tell you what it is.</span>
+          <span><strong>Smart Paste</strong> — paste anything (a token, JSON, a date, Base64…) and we’ll tell you what it is.</span>
           <kbd>{isMac ? "⌘" : "Ctrl"} V</kbd>
         </Link>
         <div className="quick">
@@ -401,14 +381,8 @@ function Home({ openPalette, showHero }) {
           {quick.map(([label, to]) => <Link key={to} to={to} className="chip">{label}</Link>)}
         </div>
       </section> : (
-        <section className="mini-hero">
-          <h1>All tools</h1>
-          <div className="hero-search compact">
-            <Search size={18} />
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter tools…" aria-label="Search tools"
-              onKeyDown={(e) => { if (e.key === "Enter" && tools[0]) navigate(tools[0].path); }} />
-          </div>
-        </section>
+        // Without the welcome banner, searching is done from the top bar (no second search box here).
+        <h1 className="sr-only">All tools</h1>
       )}
 
       {q.trim() ? (
@@ -419,23 +393,41 @@ function Home({ openPalette, showHero }) {
           )}
         </section>
       ) : (<>
+        <nav className="cat-grid" aria-label="Browse by category">
+          {GROUPS.map((g) => {
+            const n = ALL_TOOLS.filter((t) => t.group === g && !hidden.includes(t.path)).length;
+            if (!n) return null;
+            const Icon = g.icon;
+            return (
+              <a key={g.id} href={`#sec-${g.id}`} className={`cat tone-${g.tone}`}
+                onClick={(e) => { e.preventDefault(); if (collapsed.includes(g.id)) toggleGroup(g.id); requestAnimationFrame(() => document.getElementById(`sec-${g.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })); }}>
+                <span className="mini-tile"><Icon size={16} /></span>
+                <span className="cat-name">{g.title}</span>
+                <span className="cat-count">{n}</span>
+              </a>
+            );
+          })}
+        </nav>
         <ShortcutRow title="Pinned" icon={Star} paths={pins} />
         <ShortcutRow title="Recently used" icon={History} paths={recent}
           action={<button className="see-all as-btn" onClick={clearRecent}>Clear</button>} />
         <div className="all-head">
           <h2>All tools</h2>
-          <span className="count">{ALL_TOOLS.length}</span>
+          <span className="count">{ALL_TOOLS.length - hidden.length}</span>
           {collapsed.length > 0 && <button className="see-all as-btn" onClick={() => { setCollapsed([]); try { localStorage.removeItem("aurora-collapsed"); } catch {} }}>Show all groups</button>}
+          {hidden.length > 0 && <Link to="/settings#manage-tools" className="see-all">{hidden.length} switched off · Manage</Link>}
         </div>
         {GROUPS.map((g) => {
           const Icon = g.icon;
           const open = !collapsed.includes(g.id);
+          const shown = ALL_TOOLS.filter((t) => t.group === g && !hidden.includes(t.path));
+          if (!shown.length) return null;
           return (
-            <section key={g.id} className={`group-section tone-${g.tone} ${open ? "" : "collapsed"}`}>
+            <section key={g.id} id={`sec-${g.id}`} className={`group-section tone-${g.tone} ${open ? "" : "collapsed"}`}>
               <div className="section-head">
                 <span className="mini-tile"><Icon size={16} /></span>
                 <h2>{g.title}</h2>
-                <span className="count">{g.tools.length}</span>
+                <span className="count">{shown.length}</span>
                 <Link to={`/${g.id}`} className="see-all">See all <ArrowRight size={14} /></Link>
                 <button
                   className="round-btn small group-toggle"
@@ -448,7 +440,7 @@ function Home({ openPalette, showHero }) {
                   <ChevronDown size={16} className={open ? "chev open" : "chev"} />
                 </button>
               </div>
-              {open && <ul className="cards" id={`group-${g.id}`}>{ALL_TOOLS.filter((t) => t.group === g).map((t) => <ToolCard key={t.path} tool={t} />)}</ul>}
+              {open && <ul className="cards" id={`group-${g.id}`}>{shown.map((t) => <ToolCard key={t.path} tool={t} />)}</ul>}
             </section>
           );
         })}
@@ -462,8 +454,8 @@ function Home({ openPalette, showHero }) {
               <Link to="/settings" className="tcard tone-blue">
                 <span className="tile"><Settings size={26} /></span>
                 <span className="tcard-body">
-                  <h3>Theme & layout</h3>
-                  <p>Customize DevDeck look & feel: colours, light or dark, layout presets and text size</p>
+                  <h3>Theme, layout & tools</h3>
+                  <p>Colours, light or dark, layout presets, text size, the code editor, and which tools to show</p>
                 </span>
                 <ArrowUpRight size={18} className="tcard-arrow" />
               </Link>
@@ -477,7 +469,8 @@ function Home({ openPalette, showHero }) {
 
 function GroupPage({ group }) {
   const Icon = group.icon;
-  const tools = ALL_TOOLS.filter((t) => t.group === group);
+  const hidden = useHidden();
+  const tools = ALL_TOOLS.filter((t) => t.group === group && !hidden.includes(t.path));
   return (
     <>
       <section className={`banner tone-${group.tone}`}>
@@ -525,7 +518,10 @@ function ToolPage({ tool }) {
           <h1>{tool.title}</h1>
           <p className="lead">{tool.desc}</p>
         </div>
-        <PinButton path={tool.path} big />
+        <div className="hero-actions">
+          <PinButton path={tool.path} big />
+          <PopOut tool={tool} />
+        </div>
       </div>
       <Suspense fallback={<ToolLoading />}><View /></Suspense>
       {siblings.length > 0 && (
@@ -540,6 +536,64 @@ function ToolPage({ tool }) {
   );
 }
 
+/* ---------- compact windows ("overlay" mode) ---------- */
+// Just the tool, without the site around it: used in pop-out windows and the always-on-top window.
+function CompactTool({ tool }) {
+  const View = viewFor(tool.path);
+  const Icon = tool.icon;
+  return (
+    <div className={`compact-tool tone-${tool.group.tone}`}>
+      <header className="compact-head">
+        <span className="mini-tile"><Icon size={15} /></span>
+        <strong>{tool.title}</strong>
+        <a className="see-all" href={href(tool.path)} target="_blank" rel="noopener">Full page ↗</a>
+      </header>
+      <Suspense fallback={<ToolLoading />}><View /></Suspense>
+    </div>
+  );
+}
+
+// Copy the page's styles and theme into another window (for the always-on-top window).
+function cloneStyles(target) {
+  for (const sheet of document.styleSheets) {
+    try {
+      const style = target.document.createElement("style");
+      style.textContent = [...sheet.cssRules].map((r) => r.cssText).join("\n");
+      target.document.head.appendChild(style);
+    } catch {
+      if (sheet.href) target.document.head.appendChild(Object.assign(target.document.createElement("link"), { rel: "stylesheet", href: sheet.href }));
+    }
+  }
+  Object.assign(target.document.documentElement.dataset, document.documentElement.dataset);
+}
+
+function PopOut({ tool }) {
+  const canFloat = typeof window !== "undefined" && "documentPictureInPicture" in window;
+  const newWindow = () => window.open(`${href(tool.path)}?compact=1`, `devdeck-${Date.now()}`, "popup,width=560,height=780");
+  const keepOnTop = async () => {
+    try {
+      const pip = await window.documentPictureInPicture.requestWindow({ width: 480, height: 640 });
+      cloneStyles(pip);
+      pip.document.title = tool.title;
+      pip.document.body.className = "pip-body";
+      const host = pip.document.body.appendChild(pip.document.createElement("div"));
+      const root = createRoot(host);
+      root.render(<CompactTool tool={tool} />);
+      pip.addEventListener("pagehide", () => root.unmount());
+    } catch { newWindow(); }
+  };
+  return (
+    <span className="popout">
+      <button className="pin-btn big" onClick={newWindow} title="Open this tool in its own small window — open several to use tools side by side">
+        <SquareArrowOutUpRight size={18} /><span>Pop out</span>
+      </button>
+      {canFloat && <button className="pin-btn big" onClick={keepOnTop} title="A small window that stays on top of your other apps">
+        <PictureInPicture2 size={18} /><span>Keep on top</span>
+      </button>}
+    </span>
+  );
+}
+
 function NotFound() {
   return (
     <section className="hero small">
@@ -551,6 +605,8 @@ function NotFound() {
 
 function SettingsPage({ prefsApi }) {
   const { prefs, set, reset, applyPreset } = prefsApi;
+  const editorOn = useCodeEditor();
+  useEffect(() => { if (location.hash === "#manage-tools") document.getElementById("manage-tools")?.scrollIntoView(); }, []);
   return (
     <section className="page settings-page">
       <div className="tool-hero tone-blue">
@@ -565,7 +621,70 @@ function SettingsPage({ prefsApi }) {
         <div className="panel"><span className="panel-label">Theme</span><ThemePicker prefs={prefs} set={set} /></div>
         <div className="panel"><span className="panel-label">Layout</span><LayoutPicker prefs={prefs} set={set} reset={reset} applyPreset={applyPreset} /></div>
       </div>
+      <div className="panel">
+        <span className="panel-label"><Code size={14} /> Code boxes</span>
+        <label className="check"><input type="checkbox" checked={editorOn} onChange={(e) => setCodeEditor(e.target.checked)} /> Code editor: line numbers, coloured JSON / YAML / XML / SQL, and Tab to indent</label>
+        <p className="muted small">In a code box, Tab indents the selected lines (Shift + Tab un-indents). Press Esc, then Tab, to move on to the next control.</p>
+      </div>
+      <ManageTools />
+      <div className="panel about">
+        <span className="panel-label">About</span>
+        <p>DevDeck is made by <strong>ezin-rev</strong>. The source code is on GitHub — <a className="inline-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">github.com/ezin-rev/devdeck</a>.</p>
+      </div>
     </section>
+  );
+}
+
+// Switch tools on or off (like extensions): switched-off tools leave the menus, home page and search.
+function ManageTools() {
+  const hidden = useHidden();
+  const [q, setQ] = useState("");
+  const shown = (g) => g.tools.filter((t) => !q.trim() || `${t.title} ${t.desc}`.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className="panel" id="manage-tools">
+      <div className="panel-head">
+        <span className="panel-label"><Puzzle size={14} /> Manage tools — {ALL_TOOLS.length - hidden.length} of {ALL_TOOLS.length} switched on</span>
+        <div className="panel-actions">
+          <input className="field small wide-small" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a tool" aria-label="Find a tool" />
+          <button className="btn ghost" onClick={() => setHidden([])} disabled={!hidden.length}>Switch all on</button>
+        </div>
+      </div>
+      <div className="toolset-grid" role="radiogroup" aria-label="Tool set">
+        {TOOL_SETS.map((s) => {
+          const off = ALL_TOOLS.filter((t) => t.level > s.level).map((t) => t.path);
+          const on = off.length === hidden.length && off.every((p) => hidden.includes(p));
+          const count = ALL_TOOLS.length - off.length;
+          return (
+            <button key={s.id} role="radio" aria-checked={on} className={`toolset ${on ? "on" : ""}`} onClick={() => setHidden(off)}>
+              <span className="toolset-head"><strong>{s.name}</strong><span className="count">{count} tools</span></span>
+              <span className="toolset-desc">{s.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+      {!TOOL_SETS.some((s) => { const off = ALL_TOOLS.filter((t) => t.level > s.level).map((t) => t.path); return off.length === hidden.length && off.every((p) => hidden.includes(p)); }) &&
+        <p className="muted small">Custom selection — pick a set above to start again, or switch single tools on and off below.</p>}
+      <div className="manage-grid">
+        {GROUPS.map((g) => {
+          const list = shown(g);
+          if (!list.length) return null;
+          const paths = g.tools.map((t) => `/${g.id}/${t.id}`);
+          const allOff = paths.every((p) => hidden.includes(p));
+          return (
+            <fieldset key={g.id} className={`manage-group tone-${g.tone}`}>
+              <legend>
+                <label className="check"><input type="checkbox" checked={!allOff} onChange={() => setHidden(allOff ? hidden.filter((p) => !paths.includes(p)) : [...hidden, ...paths])} /> <strong>{g.title}</strong></label>
+              </legend>
+              {list.map((t) => {
+                const p = `/${g.id}/${t.id}`;
+                return <label key={p} className="check manage-item"><input type="checkbox" checked={!hidden.includes(p)} onChange={() => toggleHidden(p)} /> {t.title}</label>;
+              })}
+            </fieldset>
+          );
+        })}
+      </div>
+      <p className="muted small">Switched-off tools still open from a saved link or bookmark.</p>
+    </div>
   );
 }
 
@@ -616,6 +735,11 @@ export default function App() {
   else if (tool) content = <ToolPage tool={tool} />;
   else content = <NotFound />;
 
+  // Pop-out windows open the tool alone (…/tool?compact=1).
+  if (tool && new URLSearchParams(window.location.search).has("compact")) {
+    return <div className="app compact-app"><main className="content" id="main"><CompactTool tool={tool} /></main></div>;
+  }
+
   return (
     <div className="app">
       <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>Skip to main content</a>
@@ -626,8 +750,11 @@ export default function App() {
         <main className="content" key={path} id="main" ref={mainRef} tabIndex={-1} aria-label={titleFor(path).replace(/ – DevDeck$/, "")}>{content}</main>
       </div>
       <footer className="footer">
-        <span><ShieldCheck size={14} /> Everything runs in your browser — nothing you type is uploaded.</span>
-        <Link to="/settings">Theme & layout settings</Link>
+        <span title="Network & APIs tools contact the address you enter; everything else stays on your device."><ShieldCheck size={14} /> Runs in your browser</span>
+        <span className="footer-links">
+          <Link to="/settings">Settings</Link>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="credit"><Github size={14} /> GitHub</a>
+        </span>
       </footer>
       <Palette open={palette} onClose={() => setPalette(false)} />
     </div>

@@ -1,0 +1,125 @@
+/* ---------- phones and tablets (iPhone, iPad, Android) ---------- */
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; }
+input.field, textarea.field { -webkit-appearance: none; appearance: none; }
+.table-wrap, .tabs, .palette-list, .ws-log { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+
+/* Notch and home-bar safe areas (when installed to the home screen, or in landscape) */
+.topbar { padding-top: env(safe-area-inset-top); }
+.topbar-row { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+/* the tab row spans the full width (so it can scroll) but starts in line with the logo */
+.tabs { padding-left: max(24px, calc((100% - 1200px) / 2 + 24px), env(safe-area-inset-left)); padding-right: max(24px, calc((100% - 1200px) / 2 + 24px), env(safe-area-inset-right)); }
+[data-width="full"] .tabs { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+.content { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+.footer { padding-bottom: max(32px, calc(env(safe-area-inset-bottom) + 16px)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+.palette-backdrop { padding-top: max(10vh, calc(env(safe-area-inset-top) + 16px)); }
+
+/* Mobile browsers: the visible height changes with the address bar and keyboard */
+@supports (height: 100dvh) {
+  .app { min-height: 100dvh; }
+  [data-nav="side"] .sidenav, [data-nav="rail"] .sidenav { max-height: calc(100dvh - 65px); }
+  .palette-list { max-height: 50dvh; }
+}
+
+/* Touch screens: bigger targets, no keyboard hints, no hover-only effects */
+@media (hover: none) and (pointer: coarse) {
+  /* iPhone/iPad zoom into any text box under 16px — keep boxes at 16px so the page stays put */
+  input, select, textarea, .field, .field.mono, .palette-input input { font-size: 16px !important; }
+  .code-gutter { font-size: 16px; }
+
+  .btn { min-height: 44px; }
+  .btn.ghost { min-height: 40px; padding: 0 12px; }
+  .segmented button { min-height: 38px; padding: 0 14px; }
+  .round-btn { width: 44px; height: 44px; }
+  .round-btn.small { width: 38px; height: 38px; }
+  .chip { min-height: 38px; display: inline-flex; align-items: center; }
+  .tab { min-height: 40px; }
+  .check input[type="checkbox"], .check input[type="radio"] { width: 22px; height: 22px; }
+  .check { min-height: 40px; }
+  .palette-item { min-height: 52px; }
+  .side-tool, .side-link { min-height: 40px; display: flex; align-items: center; }
+  .tab-menu-item { min-height: 52px; }
+  input[type="range"] { height: 32px; }
+
+  .hero-kbd, .search-trigger kbd, .palette-input kbd, .smart-cta kbd, .palette-enter { display: none; }
+  .popout { display: none; } /* pop-out windows aren't a thing on phones and tablets */
+
+  .tcard:hover, .chip:hover, .btn.primary:hover, .round-btn:hover, .theme-opt:hover, .preset-opt:hover, .smart-cta:hover { transform: none; }
+  .tcard:hover { box-shadow: none; }
+  .tcard:active { transform: scale(0.99); }
+  .btn:active:not(:disabled), .chip:active { transform: scale(0.97); }
+}
+
+/* Tablets (iPad portrait, small laptops) */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .topbar-row { gap: 14px; }
+  .content { gap: 36px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .tool-hero { flex-wrap: wrap; }
+  .hero-actions { margin-left: 0; }
+  .form-grid.four { grid-template-columns: 1fr 1fr; }
+  .request-line .grow-field { min-width: 260px; }
+}
+
+/* Phones */
+@media (max-width: 640px) {
+  .topbar-row, .tabs { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .content { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .popover { top: calc(64px + env(safe-area-inset-top)); max-height: calc(100vh - 80px); overflow-y: auto; }
+
+  /* the quick search opens as a sheet from the top */
+  .palette-backdrop { padding: calc(env(safe-area-inset-top) + 8px) 8px 8px; align-items: flex-start; }
+  .palette { border-radius: 16px; }
+
+  /* tall code boxes would push everything off screen */
+  textarea.field { max-height: 55vh; }
+  .panel { padding: 14px; }
+  .panel-head { align-items: flex-start; }
+  .panel-actions { gap: 2px; }
+  .options-row { gap: 8px; }
+  .options-row > .field, .options-row > input.field { flex: 1 1 100%; width: 100%; }
+  .field.small.wide-small, .wide-small { width: 100%; max-width: none; }
+  .request-line > * { flex: 1 1 100%; }
+  .request-line .btn, .request-line .badge { flex: 0 0 auto; }
+  .segmented { max-width: 100%; }
+
+  .cat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cat { padding: 8px 10px; font-size: 13px; gap: 8px; }
+  .cat .mini-tile { width: 28px; height: 28px; }
+  .tcard { padding: 14px; gap: 12px; }
+  .tile { width: 40px; height: 40px; border-radius: 12px; }
+  .tile svg { width: 20px; height: 20px; }
+  .big-answer { font-size: 18px; padding: 16px; }
+  .random-answer { font-size: 26px; }
+  .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { padding: 12px 14px; }
+  .stat strong { font-size: 22px; }
+  .issue { padding: 10px 12px; }
+  .resx-input { min-width: 180px; }
+  .palette-row { grid-template-columns: 1fr; }
+  .manage-grid, .vision-grid { grid-template-columns: 1fr; }
+  .cert-answer .badge { margin-left: 0; }
+  .hero-actions { width: 100%; justify-content: flex-start; }
+  /* tool title sits beside its icon instead of dropping below it */
+  .tool-hero > div:not(.hero-actions), .banner > div { flex: 1 1 200px; min-width: 0; }
+  .tool-hero .banner-tile, .banner .banner-tile { width: 44px; height: 44px; border-radius: 13px; }
+  .pin-btn.big span { display: inline; }
+  .code-gutter { min-width: 2.6em; padding-left: 6px; padding-right: 6px; }
+  .footer { padding-top: 14px; }
+  .compact-app .content { padding: 10px; }
+}
+
+/* Small phones (iPhone SE / mini) */
+@media (max-width: 380px) {
+  .logo span:not(.logo-mark) { font-size: 16px; }
+  .segmented button { padding: 0 10px; }
+  .stats { grid-template-columns: 1fr; }
+}
+
+/* Phones turned sideways: little height, so keep the bar slim */
+@media (max-height: 480px) and (orientation: landscape) {
+  .topbar { position: static; }
+  .palette-list { max-height: 60vh; }
+  textarea.field { max-height: 70vh; }
+}

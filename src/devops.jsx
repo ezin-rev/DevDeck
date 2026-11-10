@@ -660,12 +660,12 @@ export function CurlTool() {
 }
 
 export const DEVOPS_VIEWS = {
-  "/devops/cidr": CidrTool,
-  "/devops/kubernetes": K8sTool,
-  "/devops/docker-compose": DockerRunTool,
-  "/devops/env": EnvTool,
-  "/devops/units": UnitsTool,
-  "/devops/uptime": UptimeTool,
-  "/devops/semver": SemverTool,
-  "/devops/curl": CurlTool,
+  "/calculators/cidr": CidrTool,
+  "/generators/kubernetes": K8sTool,
+  "/converters/docker-compose": DockerRunTool,
+  "/converters/env": EnvTool,
+  "/calculators/units": UnitsTool,
+  "/calculators/uptime": UptimeTool,
+  "/calculators/semver": SemverTool,
+  "/converters/curl": CurlTool,
 };

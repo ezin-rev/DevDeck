@@ -1,10 +1,11 @@
 // Offline support: keep a copy of the site so the tools still open without internet.
 // Pages: try the network first (to get updates), fall back to the saved copy.
 // Built files (scripts, styles, fonts): their names change with every build, so the saved copy is always right.
-const CACHE = "devdeck-v1";
+const CACHE = "devdeck-v2";
+const ICONS = ["/icon.svg", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/icon.svg", "/manifest.webmanifest"])).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", ...ICONS])).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -30,7 +31,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/assets/") || url.pathname === "/icon.svg") {
+  if (url.pathname.startsWith("/assets/") || ICONS.includes(url.pathname)) {
     event.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }

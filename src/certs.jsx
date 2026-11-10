@@ -321,7 +321,7 @@ export function CertGenerator() {
             <Panel label={out.kind === "csr" ? "Signing request (CSR)" : "Certificate"} value={out.pem} readOnly rows={12}
               extra={<>
                 <button className="btn ghost" onClick={() => download(`${base}.${out.kind === "csr" ? "csr" : "crt"}`, out.pem)}><Download size={16} /> Download</button>
-                <button className="btn ghost" onClick={() => { sendTo("/devops/cert-decoder", out.pem); navigate("/devops/cert-decoder"); }}><ExternalLink size={16} /> Inspect</button>
+                <button className="btn ghost" onClick={() => { sendTo("/validators/cert-decoder", out.pem); navigate("/validators/cert-decoder"); }}><ExternalLink size={16} /> Inspect</button>
               </>} />
             <Panel label="Private key — keep this secret" value={out.key} readOnly rows={12}
               extra={<button className="btn ghost" onClick={() => download(`${base}.key`, out.key)}><Download size={16} /> Download</button>} />
@@ -347,7 +347,7 @@ export function certPreview(text) {
 }
 
 export const CERT_VIEWS = {
-  "/devops/cert-decoder": CertDecoder,
-  "/devops/cert-generator": CertGenerator,
+  "/validators/cert-decoder": CertDecoder,
+  "/generators/cert-generator": CertGenerator,
 };
 
