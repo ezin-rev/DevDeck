@@ -1,0 +1,28 @@
+{
+  "id": "text-extras",
+  "name": "Text Extras",
+  "version": "1.0.0",
+  "author": "ezin-rev",
+  "description": "Example plugin: a slug maker (simple text in → text out tool) and a Unicode inspector (a tool with its own screen).",
+  "homepage": "https://github.com/ezin-rev/devdeck/blob/main/PLUGINS.md",
+  "tools": [
+    {
+      "id": "slugify",
+      "title": "Slugify",
+      "short": "Slugify",
+      "desc": "Turn titles into clean web-address slugs like my-first-post",
+      "icon": "link",
+      "keywords": "slug url permalink seo kebab title",
+      "level": 1
+    },
+    {
+      "id": "unicode-inspector",
+      "title": "Unicode Inspector",
+      "short": "Unicode Inspector",
+      "desc": "See every character’s code point, UTF-8 bytes and escapes — find hidden spaces and look-alikes",
+      "icon": "search",
+      "keywords": "unicode utf8 utf-8 code point character emoji invisible zero width escape",
+      "level": 2
+    }
+  ]
+}

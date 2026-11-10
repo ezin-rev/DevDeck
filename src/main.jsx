@@ -9,6 +9,9 @@ import "./devops.css";
 import "./more.css";
 import "./mobile.css";
 import App from "./App.jsx";
+import { isDesktop, setupDesktop } from "./desktop.js";
+
+setupDesktop();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -16,7 +19,8 @@ createRoot(document.getElementById("root")).render(
   </StrictMode>
 );
 
-// Offline support and "install as app" (only in the published build, and only where the browser allows it).
-if (import.meta.env.PROD && "serviceWorker" in navigator && window.isSecureContext) {
+// Offline support and "install as app" (only in the published website, and only where the browser allows it;
+// the desktop app already has everything on disk).
+if (import.meta.env.PROD && !isDesktop && "serviceWorker" in navigator && window.isSecureContext) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
 }

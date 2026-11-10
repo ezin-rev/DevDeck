@@ -6,7 +6,7 @@ import {
   FileText, Pilcrow, Users, Globe, Keyboard, BookOpen,
   ShieldCheck, Calculator, Network, Boxes, Container, FileKey2, Ruler, Activity, Tags, Terminal, FileBadge, BadgeCheck,
   ScanQrCode, FileArchive, ImageDown, ImageMinus, Eye, SearchCode, FileJson, FileCheck2, ListChecks, CopyCheck, Dices,
-  Languages, Key, Radio, Webhook, Send, FileDiff, PackageSearch, ServerCog, TextQuote, GitCompare, Waypoints, Cable, FileCog, ScrollText, Split,
+  Languages, Key, Radio, Webhook, Send, FileDiff, PackageSearch, ServerCog, TextQuote, GitCompare, Waypoints, Cable, FileCog, ScrollText, Split, Puzzle,
 } from "lucide-react";
 
 // The tools that used to form the "DevOps" group; they now sit in the general groups by what they do.
@@ -150,6 +150,22 @@ export const GROUPS = [
   },
 ];
 
+/* ---------- plugins (src/plugins/<id>/plugin.json) — see PLUGINS.md ---------- */
+// Vite reads every plugin's plugin.json at build time; outside Vite (Node scripts) there are none here.
+let manifests = {};
+try { manifests = import.meta.glob("./plugins/*/plugin.json", { eager: true, import: "default" }); } catch { /* not running in Vite */ }
+// Icons a plugin can name in plugin.json ("icon": "link"); anything else shows a puzzle piece.
+export const PLUGIN_ICONS = { puzzle: Puzzle, link: Link, search: SearchCode, text: Type, hash: Hash, code: CodeXml, braces: Braces, clock: Clock, palette: Palette,
+  lock: LockKeyhole, key: Key, globe: Globe, image: Image, file: FileText, database: Database, terminal: Terminal, calculator: Calculator, wand: WandSparkles, network: Network, zap: Zap };
+export const PLUGINS = Object.values(manifests)
+  .filter((m) => m && m.id && Array.isArray(m.tools))
+  .sort((a, b) => a.name.localeCompare(b.name));
+const pluginTools = PLUGINS.flatMap((m) => m.tools.map((t) => ({
+  id: t.id, short: t.short || t.title, title: t.title, desc: t.desc || "", icon: PLUGIN_ICONS[t.icon] || Puzzle,
+  plugin: m.id, pluginLevel: t.level, pluginWords: t.keywords || "",
+})));
+if (pluginTools.length) GROUPS.push({ id: "plugins", title: "Plugins", tab: "Plugins", icon: Puzzle, tone: "violet", tools: pluginTools });
+
 // Extra words people search for that aren't in a tool's title or description.
 const SEARCH_WORDS = {
   "smart-paste": "detect identify guess what is this auto clipboard",
@@ -242,6 +258,6 @@ const levelOf = (id) => (ESSENTIALS.includes(id) ? 1 : SPECIALIST.includes(id) ?
 
 // Searching "devops" still finds the tools that used to be in the DevOps group.
 export const ALL_TOOLS = GROUPS.flatMap((g) =>
-  g.tools.map((t) => ({ ...t, group: g, path: `/${g.id}/${t.id}`, level: levelOf(t.id), words: `${SEARCH_WORDS[t.id] || ""}${T[t.id] ? " devops ops infrastructure" : ""}` }))
+  g.tools.map((t) => ({ ...t, group: g, path: `/${g.id}/${t.id}`, level: t.pluginLevel || levelOf(t.id), words: `${SEARCH_WORDS[t.id] || ""}${t.pluginWords ? ` ${t.pluginWords} plugin` : ""}${T[t.id] ? " devops ops infrastructure" : ""}` }))
 );
 

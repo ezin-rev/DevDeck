@@ -10,7 +10,57 @@ export const THEMES = [
   { id: "rose", name: "Dusk Rose", note: "Gentle mauve and blush", fx: "soft", swatch: ["#231c1f", "#f8f4f5", "#a3566e"] },
   { id: "mono", name: "Ink & Paper", note: "Black and white, no colour", fx: "soft", swatch: ["#181818", "#fafafa", "#262626"] },
   { id: "aurora", name: "Neon Glow", note: "Purple and cyan with a soft moving glow", fx: "vivid", swatch: ["#0a0d1a", "#f6f7fb", "#8b7dff"] },
+  { id: "custom", name: "Custom", note: "Your own colours — fine-tune them in Settings", fx: "soft", swatch: [] },
 ];
+
+/* ---------- custom theme: the nine base colours (per light/dark mode) plus a few style knobs ---------- */
+export const CUSTOM_COLORS = [
+  ["bg", "Background"], ["card", "Cards & panels"], ["field", "Text boxes"],
+  ["text", "Text"], ["text-strong", "Headings"], ["muted", "Quiet text"],
+  ["accent", "Accent"], ["accent-2", "Second accent"], ["on-accent", "Text on accent"],
+];
+export const CUSTOM_FONTS = {
+  jakarta: ["Rounded sans (default)", '"Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif'],
+  system: ["Your device’s font", 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'],
+  serif: ["Serif", 'Georgia, "Iowan Old Style", "Times New Roman", serif'],
+  mono: ["Monospace everywhere", '"JetBrains Mono Variable", ui-monospace, Menlo, monospace'],
+};
+const CUSTOM_VARS = [...CUSTOM_COLORS.map(([k]) => `--${k}`), "--r-s", "--r-m", "--r-l", "--sat", "--line-mix", "--font"];
+
+export function applyCustomTheme(custom, mode) {
+  const s = document.documentElement.style;
+  const c = custom?.[mode];
+  if (!c) return clearCustomTheme();
+  for (const [k] of CUSTOM_COLORS) if (c[k]) s.setProperty(`--${k}`, c[k]);
+  const r = custom.radius ?? 1;
+  s.setProperty("--r-s", `${Math.round(10 * r)}px`); s.setProperty("--r-m", `${Math.round(14 * r)}px`); s.setProperty("--r-l", `${Math.round(18 * r)}px`);
+  s.setProperty("--sat", `${custom.sat ?? 62}%`);
+  s.setProperty("--line-mix", `${custom.line ?? 9}%`);
+  s.setProperty("--font", (CUSTOM_FONTS[custom.font] || CUSTOM_FONTS.jakarta)[1]);
+}
+export function clearCustomTheme() { const s = document.documentElement.style; for (const v of CUSTOM_VARS) s.removeProperty(v); }
+
+const hex6 = (v) => { const h = (v || "").trim().replace(/^#/, ""); return /^[0-9a-f]{3}$/i.test(h) ? `#${h.replace(/./g, "$&$&")}`.toLowerCase() : /^[0-9a-f]{6}$/i.test(h) ? `#${h}`.toLowerCase() : "#888888"; };
+// Read a built-in theme's base colours (both modes) straight from the stylesheet.
+export function readThemeColors(paletteId) {
+  const el = document.documentElement, d = el.dataset, keep = { theme: d.theme, palette: d.palette };
+  const inline = CUSTOM_VARS.map((v) => [v, el.style.getPropertyValue(v)]);
+  clearCustomTheme();
+  d.palette = paletteId;
+  const read = (mode) => { d.theme = mode; const cs = getComputedStyle(el); return Object.fromEntries(CUSTOM_COLORS.map(([k]) => [k, hex6(cs.getPropertyValue(`--${k}`))])); };
+  const out = { light: read("light"), dark: read("dark") };
+  d.theme = keep.theme; d.palette = keep.palette;
+  for (const [v, val] of inline) if (val) el.style.setProperty(v, val);
+  return out;
+}
+export const seedCustom = (fromPalette, prev = {}) => ({ radius: 1, fx: "soft", sat: 62, line: 9, font: "jakarta", ...prev, ...readThemeColors(fromPalette) });
+
+// WCAG contrast ratio between two hex colours (4.5+ is comfortable for normal text).
+export function contrast(a, b) {
+  const lum = (h) => { const n = parseInt(hex6(h).slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0); };
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
 
 export const LAYOUT_OPTIONS = [
   { key: "nav", label: "Navigation", hint: "Where the tool groups live (side options are for wide screens)", options: [["tabs", "Top tabs"], ["side", "Side menu"], ["rail", "Icon bar"], ["minimal", "Search only"]] },
@@ -64,10 +114,12 @@ export function usePrefs() {
   const isDark = prefs.mode === "dark" || (prefs.mode === "system" && systemDark);
   useEffect(() => {
     const d = document.documentElement.dataset;
-    const theme = THEMES.find((t) => t.id === prefs.palette) || THEMES[0];
+    const custom = prefs.palette === "custom" && prefs.custom ? prefs.custom : null;
+    const theme = THEMES.find((t) => t.id === prefs.palette && (t.id !== "custom" || custom)) || THEMES[0];
     d.theme = isDark ? "dark" : "light";
     d.palette = theme.id;
-    d.fx = theme.fx;
+    d.fx = custom ? (custom.fx || "soft") : theme.fx;
+    if (custom) applyCustomTheme(custom, isDark ? "dark" : "light"); else clearCustomTheme();
     for (const k of LAYOUT_KEYS) if (k !== "hero") d[k] = prefs[k];
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch {}
   }, [prefs, isDark]);
@@ -96,16 +148,88 @@ export function ThemePicker({ prefs, set }) {
     <div className="picker">
       <Choice label="Mode" hint="Light, dark, or follow your device" value={prefs.mode} onChange={(v) => set("mode", v)} options={[["light", "Light"], ["dark", "Dark"], ["system", "System"]]} />
       <div className="theme-grid" role="radiogroup" aria-label="Colour theme">
-        {THEMES.map((t) => (
-          <button key={t.id} role="radio" aria-checked={prefs.palette === t.id} className={`theme-opt ${prefs.palette === t.id ? "on" : ""}`} onClick={() => set("palette", t.id)}>
+        {THEMES.map((t) => {
+          const sw = t.id === "custom" ? (prefs.custom ? [prefs.custom.dark.bg, prefs.custom.light.bg, prefs.custom.light.accent] : ["#444", "#bbb", "conic-gradient(#f43f5e, #f59e0b, #22c55e, #3b82f6, #a855f7, #f43f5e)"]) : t.swatch;
+          return (
+          <button key={t.id} role="radio" aria-checked={prefs.palette === t.id} className={`theme-opt ${prefs.palette === t.id ? "on" : ""}`}
+            onClick={() => { if (t.id === "custom" && !prefs.custom) set("custom", seedCustom(prefs.palette === "custom" ? "contrast" : prefs.palette)); set("palette", t.id); }}>
             <span className="swatch" aria-hidden="true">
-              <i style={{ background: t.swatch[0] }} /><i style={{ background: t.swatch[1] }} /><i style={{ background: t.swatch[2] }} />
+              <i style={{ background: sw[0] }} /><i style={{ background: sw[1] }} /><i style={{ background: sw[2] }} />
             </span>
             <span className="theme-name">{t.name}</span>
             <span className="theme-note">{t.note}</span>
           </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Fine-tune your own theme (Settings page): colours for the current mode, shape, glow and font. */
+export function ThemeEditor({ prefs, set, isDark }) {
+  const [shared, setShared] = useState("");
+  const [msg, setMsg] = useState("");
+  const mode = isDark ? "dark" : "light";
+  const c = prefs.palette === "custom" ? prefs.custom : null;
+  if (!c) {
+    return (
+      <div className="theme-editor-cta">
+        <span className="muted small">Want your own colours, roundness or font?</span>
+        <button className="btn" onClick={() => { set("custom", seedCustom(prefs.palette, prefs.custom)); set("palette", "custom"); }}>Customize this theme</button>
+      </div>
+    );
+  }
+  const upd = (patch) => set("custom", { ...c, ...patch });
+  const col = c[mode];
+  const checks = [
+    ["Text on background", contrast(col.text, col.bg), 4.5],
+    ["Text on cards", contrast(col.text, col.card), 4.5],
+    ["Quiet text", contrast(col.muted, col.bg), 3],
+    ["Text on accent buttons", contrast(col["on-accent"], col.accent), 4.5],
+  ];
+  return (
+    <div className="theme-editor">
+      <div className="panel-head">
+        <span className="panel-label">Fine-tune your theme — {mode} mode</span>
+        <span className="muted small">Switch Light/Dark above to edit the other mode’s colours.</span>
+      </div>
+      <div className="color-grid">
+        {CUSTOM_COLORS.map(([k, label]) => (
+          <label key={k} className="color-field">
+            <input type="color" value={col[k]} onChange={(e) => upd({ [mode]: { ...col, [k]: e.target.value } })} aria-label={label} />
+            <span><strong>{label}</strong><code>{col[k]}</code></span>
+          </label>
         ))}
       </div>
+      <div className="contrast-row">
+        {checks.map(([label, ratio, need]) => (
+          <span key={label} className={`badge ${ratio >= need ? "ok-badge" : "warn-badge"}`} title={`Contrast ${ratio.toFixed(1)}:1 — at least ${need}:1 is easy to read`}>
+            {label}: {ratio.toFixed(1)}:1 {ratio >= need ? "✓" : "— hard to read"}
+          </span>
+        ))}
+      </div>
+      <div className="knob-grid">
+        <label className="knob">Roundness <input type="range" min="0" max="2" step="0.1" value={c.radius ?? 1} onChange={(e) => upd({ radius: +e.target.value })} /> <span>{Math.round((c.radius ?? 1) * 100)}%</span></label>
+        <label className="knob">Border strength <input type="range" min="0" max="30" value={c.line ?? 9} onChange={(e) => upd({ line: +e.target.value })} /> <span>{c.line ?? 9}%</span></label>
+        <label className="knob">Category colours <input type="range" min="0" max="100" value={c.sat ?? 62} onChange={(e) => upd({ sat: +e.target.value })} /> <span>{c.sat ?? 62}%</span></label>
+        <label className="knob">Font <select className="field small-select" value={c.font || "jakarta"} onChange={(e) => upd({ font: e.target.value })}>{Object.entries(CUSTOM_FONTS).map(([k, [name]]) => <option key={k} value={k}>{name}</option>)}</select></label>
+        <label className="check"><input type="checkbox" checked={c.fx === "vivid"} onChange={(e) => upd({ fx: e.target.checked ? "vivid" : "soft" })} /> Glow & gradients</label>
+      </div>
+      <div className="options-row">
+        <label className="check">Start again from <select className="field small-select" value="" onChange={(e) => { if (e.target.value) { upd(readThemeColors(e.target.value)); setMsg(`Colours copied from ${THEMES.find((t) => t.id === e.target.value).name}.`); } }}>
+          <option value="">choose a theme…</option>{THEMES.filter((t) => t.id !== "custom").map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select></label>
+        <button className="btn ghost" onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(c)); setMsg("Theme copied — paste it to share or back it up."); } catch { setShared(JSON.stringify(c)); } }}>Copy theme</button>
+        <button className="btn ghost" onClick={() => setShared(shared ? "" : " ")}>Paste a theme…</button>
+      </div>
+      {shared && (
+        <div className="options-row">
+          <input className="field mono grow-field" value={shared.trim()} onChange={(e) => setShared(e.target.value)} placeholder='{"light":{…},"dark":{…}}' aria-label="Theme to paste" />
+          <button className="btn" onClick={() => { try { const t = JSON.parse(shared); if (!t.light || !t.dark) throw 0; upd(t); setShared(""); setMsg("Theme applied."); } catch { setMsg("That isn’t a DevDeck theme (it needs light and dark colours)."); } }}>Use it</button>
+        </div>
+      )}
+      {msg && <p className="muted small">{msg}</p>}
     </div>
   );
 }

@@ -8,7 +8,12 @@
   },
   "scripts": {
     "build": "vite build && node scripts/routes.mjs dist",
-    "cli": "node scripts/devdeck-cli.mjs"
+    "cli": "node scripts/devdeck-cli.mjs",
+    "new-plugin": "node scripts/new-plugin.mjs",
+    "dev:web": "vite",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
@@ -28,6 +33,7 @@
     "sql-formatter": "^15.9.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.11"
   },
@@ -39,5 +45,6 @@
   },
   "bugs": {
     "url": "https://github.com/ezin-rev/devdeck/issues"
-  }
+  },
+  "license": "MIT"
 }

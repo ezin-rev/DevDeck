@@ -31,6 +31,11 @@ let editorOn = (() => { try { return localStorage.getItem("aurora-code-editor") 
 export const useCodeEditor = () => useSyncExternalStore(subscribe, () => editorOn);
 export const setCodeEditor = (on) => { editorOn = on; try { localStorage.setItem("aurora-code-editor", on ? "on" : "off"); } catch {} listeners.forEach((l) => l()); };
 
+// VS Code-style shortcuts in code boxes; on unless switched off.
+let editorKeysOn = (() => { try { return localStorage.getItem("aurora-editor-keys") !== "off"; } catch { return true; } })();
+export const useEditorKeys = () => useSyncExternalStore(subscribe, () => editorKeysOn);
+export const setEditorKeys = (on) => { editorKeysOn = on; try { localStorage.setItem("aurora-editor-keys", on ? "on" : "off"); } catch {} listeners.forEach((l) => l()); };
+
 // Tools switched off in Settings → Manage tools (hidden from menus and search; their pages still open).
 export const useHidden = () => useSyncExternalStore(subscribe, () => cache["aurora-hidden"]);
 export const setHidden = (paths) => write("aurora-hidden", [...new Set(paths)]);

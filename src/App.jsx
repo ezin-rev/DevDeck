@@ -1,11 +1,13 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { House, Search, Settings, Star, History, WandSparkles, LayoutDashboard, Github, Sparkles, ArrowRight, ArrowUpRight, ChevronRight, ChevronDown, ShieldCheck, CornerDownLeft, X, SquareArrowOutUpRight, PictureInPicture2, Puzzle, Code } from "lucide-react";
-import { GROUPS, ALL_TOOLS, TOOL_SETS } from "./data.js";
+import { GROUPS, ALL_TOOLS, TOOL_SETS, PLUGINS } from "./data.js";
 import { createRoot } from "react-dom/client";
 import { usePath, Link, navigate, href } from "./router.jsx";
 import { sendTo } from "./handoff.js";
-import { usePins, useRecent, togglePin, markUsed, clearRecent, useHidden, setHidden, toggleHidden, useCodeEditor, setCodeEditor } from "./store.js";
-import { usePrefs, ThemePicker, LayoutPicker } from "./prefs.jsx";
+import { usePins, useRecent, togglePin, markUsed, clearRecent, useHidden, setHidden, toggleHidden, useCodeEditor, setCodeEditor, useEditorKeys, setEditorKeys } from "./store.js";
+import { SHORTCUTS } from "./keymap.js";
+import { isDesktop, invoke } from "./desktop.js";
+import { usePrefs, ThemePicker, ThemeEditor, LayoutPicker } from "./prefs.jsx";
 
 const byPath = (p) => ALL_TOOLS.find((t) => t.path === p);
 
@@ -17,7 +19,18 @@ const loadViews = () => (viewsPromise ||= Promise.all([
   import("./devops.jsx").then((m) => m.DEVOPS_VIEWS), import("./certs.jsx").then((m) => m.CERT_VIEWS), import("./data-tools.jsx").then((m) => m.DATA_VIEWS),
   import("./more-tools.jsx").then((m) => m.MORE_TOOL_VIEWS), import("./media.jsx").then((m) => m.MEDIA_VIEWS), import("./net.jsx").then((m) => m.NET_VIEWS),
   import("./ops.jsx").then((m) => m.OPS_VIEWS), import("./keys.jsx").then((m) => m.KEY_VIEWS),
+  loadPluginViews(),
 ]).then((all) => Object.assign({}, ...all)));
+
+// Plugins (src/plugins/<id>/index.jsx): each default-exports definePlugin(…) → { id, views }.
+// A plugin that fails to load is skipped (and reported in the console) so it can't break the site.
+const PLUGIN_CODE = import.meta.glob("./plugins/*/index.{js,jsx}");
+function loadPluginViews() {
+  return Promise.all(Object.entries(PLUGIN_CODE).map(([file, load]) => load()
+    .then((m) => Object.fromEntries(Object.entries(m.default?.views || {}).map(([toolId, View]) => [`/plugins/${toolId}`, View])))
+    .catch((e) => { console.error(`DevDeck: plugin ${file} failed to load`, e); return {}; })))
+    .then((all) => Object.assign({}, ...all));
+}
 const lazyViews = {};
 const viewFor = (path) => (lazyViews[path] ||= lazy(() => loadViews().then((v) => ({ default: v[path] || (() => null) }))));
 
@@ -606,6 +619,7 @@ function NotFound() {
 function SettingsPage({ prefsApi }) {
   const { prefs, set, reset, applyPreset } = prefsApi;
   const editorOn = useCodeEditor();
+  const editorKeysOn = useEditorKeys();
   useEffect(() => { if (location.hash === "#manage-tools") document.getElementById("manage-tools")?.scrollIntoView(); }, []);
   return (
     <section className="page settings-page">
@@ -618,20 +632,71 @@ function SettingsPage({ prefsApi }) {
         </div>
       </div>
       <div className="settings-grid">
-        <div className="panel"><span className="panel-label">Theme</span><ThemePicker prefs={prefs} set={set} /></div>
+        <div className="panel"><span className="panel-label">Theme</span><ThemePicker prefs={prefs} set={set} /><ThemeEditor prefs={prefs} set={set} isDark={prefsApi.isDark} /></div>
         <div className="panel"><span className="panel-label">Layout</span><LayoutPicker prefs={prefs} set={set} reset={reset} applyPreset={applyPreset} /></div>
       </div>
       <div className="panel">
         <span className="panel-label"><Code size={14} /> Code boxes</span>
-        <label className="check"><input type="checkbox" checked={editorOn} onChange={(e) => setCodeEditor(e.target.checked)} /> Code editor: line numbers, coloured JSON / YAML / XML / SQL, and Tab to indent</label>
-        <p className="muted small">In a code box, Tab indents the selected lines (Shift + Tab un-indents). Press Esc, then Tab, to move on to the next control.</p>
+        <label className="check"><input type="checkbox" checked={editorOn} onChange={(e) => setCodeEditor(e.target.checked)} /> Code editor look: line numbers and coloured JSON / YAML / XML / SQL</label>
+        <label className="check"><input type="checkbox" checked={editorKeysOn} onChange={(e) => setEditorKeys(e.target.checked)} /> VS Code-style shortcuts (move and copy lines, comment, auto-close brackets…)</label>
+        {editorKeysOn ? (
+          <details className="shortcut-list">
+            <summary className="muted small">Show all shortcuts</summary>
+            <table className="data-table"><tbody>{SHORTCUTS.map(([keys, what]) => <tr key={keys}><td><kbd>{keys}</kbd></td><td>{what}</td></tr>)}</tbody></table>
+          </details>
+        ) : <p className="muted small">Without the shortcuts, Tab still indents the selected lines (Shift + Tab un-indents). Press Esc, then Tab, to move on to the next control.</p>}
       </div>
       <ManageTools />
+      <PluginsPanel />
       <div className="panel about">
         <span className="panel-label">About</span>
-        <p>DevDeck is made by <strong>ezin-rev</strong>. The source code is on GitHub — <a className="inline-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">github.com/ezin-rev/devdeck</a>.</p>
+        <p>DevDeck is made by <strong>ezin-rev</strong> and is free and open source under the MIT license. The source code is on GitHub — <a className="inline-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">github.com/ezin-rev/devdeck</a>.</p>
+        <DesktopInfo />
       </div>
     </section>
+  );
+}
+
+// In the desktop app: which version is running (asked from the Rust side, src-tauri/src/lib.rs).
+function DesktopInfo() {
+  const [info, setInfo] = useState(null);
+  useEffect(() => { if (isDesktop) invoke("app_info").then(setInfo, () => {}); }, []);
+  if (!info) return null;
+  const os = { macos: "macOS", windows: "Windows", linux: "Linux" }[info.os] || info.os;
+  return <p className="muted small">Desktop app {info.version} · {os} ({info.arch})</p>;
+}
+
+// Installed plugins (src/plugins/*): switch each one on or off; switching off hides all its tools.
+function PluginsPanel() {
+  const hidden = useHidden();
+  return (
+    <div className="panel" id="plugins">
+      <div className="panel-head">
+        <span className="panel-label"><Puzzle size={14} /> Plugins — {PLUGINS.length} installed</span>
+        <a className="see-all" href={`${REPO_URL}/blob/main/PLUGINS.md`} target="_blank" rel="noopener noreferrer">How to make a plugin ↗</a>
+      </div>
+      {PLUGINS.length === 0 && <p className="muted small">No plugins yet. Add a folder in src/plugins/ (see PLUGINS.md) and rebuild.</p>}
+      <div className="plugin-list">
+        {PLUGINS.map((m) => {
+          const paths = m.tools.map((t) => `/plugins/${t.id}`);
+          const on = paths.some((p) => !hidden.includes(p));
+          return (
+            <div key={m.id} className={`plugin-card ${on ? "" : "off"}`}>
+              <div className="plugin-head">
+                <span className="mini-tile tone-violet"><Puzzle size={16} /></span>
+                <span className="plugin-name"><strong>{m.name}</strong> <span className="muted small">v{m.version}{m.author ? ` · by ${m.author}` : ""}</span></span>
+                <label className="check switch"><input type="checkbox" checked={on} onChange={() => setHidden(on ? [...hidden, ...paths] : hidden.filter((p) => !paths.includes(p)))} /> {on ? "On" : "Off"}</label>
+              </div>
+              {m.description && <p className="muted small">{m.description}</p>}
+              <div className="options-row">
+                {m.tools.map((t) => <Link key={t.id} to={`/plugins/${t.id}`} className="chip tone-violet">{t.title}</Link>)}
+                {m.homepage && <a className="see-all" href={m.homepage} target="_blank" rel="noopener noreferrer">Website ↗</a>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

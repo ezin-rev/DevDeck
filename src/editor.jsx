@@ -2,7 +2,8 @@
 // and Tab to indent. It is a normal textarea with a coloured copy of the text drawn underneath,
 // so typing, undo, selecting and pasting all behave exactly as usual.
 import { useMemo, useRef } from "react";
-import { useCodeEditor } from "./store.js";
+import { useCodeEditor, useEditorKeys } from "./store.js";
+import { handleKey } from "./keymap.js";
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
@@ -58,32 +59,23 @@ export function CodeArea({ value = "", onChange, readOnly, rows, className = "",
   const wrap = useMemo(() => value.split("\n").some((l) => l.length > 400), [value]); // tokens and Base64: wrap instead of scrolling sideways
   const lang = useMemo(() => (on && value.length < 60000 ? detectLang(value) : null), [value, on]);
   const html = useMemo(() => (lang ? highlight(value, lang) : null), [value, lang]);
-  const plainArea = <textarea className={`field mono ${className}`} value={value} rows={rows} readOnly={readOnly} spellCheck={false} placeholder={placeholder} onChange={(e) => onChange?.(e.target.value)} {...rest} />;
+  const keysOn = useEditorKeys();
+  // Shortcuts: VS Code-style when switched on in Settings, otherwise just Tab / Shift+Tab to indent.
+  // "Esc, then Tab" always leaves the box, so keyboard users never get stuck.
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") { escaped.current = true; return; }
+    if (escaped.current && e.key === "Tab") { escaped.current = false; return; }
+    escaped.current = false;
+    if (!keysOn && (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey)) return;
+    handleKey(e, { lang: lang || detectLang(value), readOnly, onChange });
+  };
+  const plainArea = <textarea className={`field mono ${className}`} value={value} rows={rows} readOnly={readOnly} spellCheck={false} placeholder={placeholder} onChange={(e) => onChange?.(e.target.value)} onKeyDown={onKeyDown} {...rest} />;
   if (!on) return plainArea;
 
   const sync = () => {
     const t = ta.current; if (!t) return;
     if (hl.current) { hl.current.scrollTop = t.scrollTop; hl.current.scrollLeft = t.scrollLeft; }
     if (gut.current) gut.current.scrollTop = t.scrollTop;
-  };
-  const onKeyDown = (e) => {
-    if (e.key === "Escape") { escaped.current = true; return; }
-    if (e.key !== "Tab" || readOnly || escaped.current || e.ctrlKey || e.metaKey || e.altKey) { escaped.current = false; return; }
-    e.preventDefault();
-    const t = e.currentTarget, { selectionStart: a, selectionEnd: b } = t, v = t.value;
-    const insert = (text, from, to, selA, selB) => {
-      t.setSelectionRange(from, to);
-      // execCommand keeps the browser's undo history; fall back to setting the text directly
-      if (!document.execCommand?.("insertText", false, text)) { onChange?.(v.slice(0, from) + text + v.slice(to)); }
-      requestAnimationFrame(() => t.setSelectionRange(selA, selB));
-    };
-    if (a === b && !e.shiftKey) { insert("  ", a, b, a + 2, a + 2); return; }
-    const start = v.lastIndexOf("\n", a - 1) + 1;
-    const end = b > a && v[b - 1] === "\n" ? b - 1 : (v.indexOf("\n", b) + 1 || v.length + 1) - 1;
-    const block = v.slice(start, end).split("\n");
-    const changed = e.shiftKey ? block.map((l) => l.replace(/^( {1,2}|\t)/, "")) : block.map((l) => "  " + l);
-    const text = changed.join("\n");
-    insert(text, start, end, start, start + text.length);
   };
   return (
     <div className={`code-area ${wrap ? "wrap" : ""}`}>

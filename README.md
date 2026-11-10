@@ -1,7 +1,39 @@
 # DevDeck
 
 By **ezin-rev** — source: https://github.com/ezin-rev/devdeck (credited in the site footer and on the
-Settings page, About panel).
+Settings page, About panel). Licensed under the **MIT License** (see `LICENSE`).
+
+| | |
+|---|---|
+| Website | `npm install && npm run build` → static files in `dist/` (set `SITE_URL=https://your-site` for the sitemap and full share links) |
+| Desktop app (Rust/Tauri) | `npm run desktop:dev` to try it, `npm run desktop:build` for installers — see **DESKTOP.md** |
+| Plugins | `npm run new-plugin -- my-plugin` — see **PLUGINS.md** |
+| Command line | `npm run cli -- help` |
+
+**Plugins.** Tools can be added as plugins: a folder in `src/plugins/<id>/` with `plugin.json` (name,
+author, tools) and `index.jsx` (`definePlugin(...)` from `src/plugin-sdk.jsx`). A tool is either a
+"transform" (text in → text out; DevDeck draws the screen) or its own React component. Plugin tools get
+a **Plugins** tab, search, pages at `/plugins/<tool-id>` (built with titles and SEO data), tool-set levels,
+and an on/off switch in Settings → Plugins. The example plugin `text-extras` adds **Slugify** and
+**Unicode Inspector**. A failing plugin is skipped without breaking the site. Full guide: `PLUGINS.md`.
+
+**Custom theme.** Settings → Theme → *Custom* (or "Customize this theme") lets visitors set the nine base
+colours separately for light and dark mode, plus roundness, border strength, category-colour strength,
+glow & gradients and the font, with live readability (contrast) checks. Themes can be copied and pasted
+as text to share. Stored with the other preferences; applied before the first paint (index.html script).
+
+**Code editor shortcuts.** Code boxes understand VS Code-style shortcuts (on by default, switch in
+Settings → Code boxes, where the full list is shown): Tab/Shift+Tab and Ctrl/⌘+] [ indent, Ctrl/⌘+/
+comment (// # -- or <!-- --> by language), Alt+↑/↓ move lines, Shift+Alt+↑/↓ copy lines,
+Ctrl/⌘+Shift+K delete lines, Ctrl/⌘+Enter new line below/above, Ctrl/⌘+L select line, Ctrl/⌘+D select
+word / next match, Ctrl/⌘+G go to line, Shift+Alt+F format JSON, smart Enter indent, auto-closing
+brackets and quotes, smart Home. All edits keep the browser's Undo. Code in `src/keymap.js`.
+
+**SEO.** Every page gets its own title and description, Open Graph / Twitter cards, JSON-LD structured
+data (SoftwareApplication + breadcrumbs on tools, ItemList on groups, WebSite on home), readable
+content for crawlers inside `#root` (heading, description and links; replaced when the app starts),
+`robots.txt`, and — when `SITE_URL` is set — `sitemap.xml`, canonical links and `og:url`. Old
+`/devops/…` addresses, Settings and the 404 page are marked `noindex`. All done in `scripts/routes.mjs`.
 
 Friendly developer tools that run entirely in the browser: a top tab bar, a big welcome
 search, and a quick-search palette (Ctrl/⌘ + K or "/"). Old `/aurora/…` links (the design's
@@ -35,8 +67,9 @@ lets visitors pick:
 formatting and converting data, encoding, hashes, IDs, passwords, text and images), **Standard** (54:
 adds common developer tools such as SQL/XML, JSON queries and schemas, cron, .env, curl, HTTP and DNS)
 and **Complete** (all 73, including certificates and keys, Docker/Kubernetes checks, gRPC, WebSocket and
-XSD). Single tools can still be switched on or off afterwards ("Custom"). Levels are set in `src/data.js`
-(`ESSENTIALS`, `SPECIALIST`; everything else is Standard).
+XSD). These counts are the 73 built-in tools; plugin tools join the set their `level` names (with the
+example plugin: 28 / 56 / 75). Single tools can still be switched on or off afterwards ("Custom"). Levels
+are set in `src/data.js` (`ESSENTIALS`, `SPECIALIST`; everything else is Standard).
 
 Extra features beyond DevToys (in `src/power.jsx`):
 - **Smart Paste**: paste anything — it detects JWTs, JSON, YAML, timestamps, dates, UUIDs,

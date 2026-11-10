@@ -4,7 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Friendly everyday tools for developers and everyone: convert, encode, format, generate and compare text." />
-    <title>DevDeck</title>
+    <title>DevDeck — free developer tools in your browser</title>
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="application-name" content="DevDeck" />
+    <meta name="author" content="ezin-rev" />
+    <meta name="keywords" content="developer tools, json formatter, base64, jwt decoder, uuid, regex tester, yaml, certificate decoder, online tools" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
@@ -39,6 +43,17 @@
         var ds = document.documentElement.dataset;
         ds.theme = d ? "dark" : "light"; ds.palette = p.palette; ds.fx = p.palette === "aurora" ? "vivid" : "soft";
         ds.nav = p.nav; ds.view = p.view; ds.panels = p.panels; ds.density = p.density; ds.text = p.text; ds.width = p.width; ds.chrome = p.chrome;
+        // Custom theme (same as applyCustomTheme in src/prefs.jsx)
+        var c = p.palette === "custom" && p.custom, m = c && c[ds.theme], st = document.documentElement.style;
+        if (m) {
+          ds.fx = c.fx || "soft";
+          for (var k in m) st.setProperty("--" + k, m[k]);
+          var r = c.radius == null ? 1 : c.radius;
+          st.setProperty("--r-s", Math.round(10 * r) + "px"); st.setProperty("--r-m", Math.round(14 * r) + "px"); st.setProperty("--r-l", Math.round(18 * r) + "px");
+          st.setProperty("--sat", (c.sat == null ? 62 : c.sat) + "%"); st.setProperty("--line-mix", (c.line == null ? 9 : c.line) + "%");
+          var f = { system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', serif: 'Georgia, "Iowan Old Style", "Times New Roman", serif', mono: '"JetBrains Mono Variable", ui-monospace, Menlo, monospace' }[c.font];
+          if (f) st.setProperty("--font", f);
+        }
       } catch (e) {}
     </script>
   </head>
