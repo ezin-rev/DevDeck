@@ -20,9 +20,9 @@ install: ## Install everything the project needs (run once)
 web: ## Build the website into dist/  (set SITE_URL=https://… for the sitemap)
 	$(NPM) run build
 
-docs: ## Build the website + documentation for GitHub Pages into dist/ (BASE_PATH=/devdeck/)
-	BASE_PATH=$${BASE_PATH:-/devdeck/} $(NPM) run build
-	BASE_PATH=$${BASE_PATH:-/devdeck/} node scripts/build-docs.mjs dist
+docs: ## Build the website + documentation for GitHub Pages into dist/ (BASE_PATH=/)
+	BASE_PATH=$${BASE_PATH:-/} $(NPM) run build
+	BASE_PATH=$${BASE_PATH:-/} node scripts/build-docs.mjs dist
 
 cli: ## Show the command-line tools
 	$(NPM) run cli -- help

@@ -10,7 +10,7 @@ export default (sdk) => ({
   version: "1.0.0",
   author: "ezin-rev",
   description: "Example installable plugin: word frequency (a text in → text out tool) and reading time (a tool with its own screen).",
-  homepage: "https://ezin-rev.github.io/devdeck/docs/plugins.html",
+  homepage: "https://ezin-rev.github.io/docs/plugins.html",
   tools: [
     {
       // A "transform" tool: DevDeck draws the input, options and output.

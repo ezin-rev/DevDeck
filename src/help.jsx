@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Search, WandSparkles, Settings, Puzzle, Keyboard, ShieldCheck, BookOpen, SquareArrowOutUpRight, Code } from "lucide-react";
 import { SHORTCUTS, MOD } from "./keymap.js";
 
-export const DOCS_URL = "https://ezin-rev.github.io/devdeck/docs/";
+export const DOCS_URL = `${import.meta.env.BASE_URL}docs/`;
 
 const SECTIONS = [
   { id: "start", icon: Search, title: "Getting around", items: [

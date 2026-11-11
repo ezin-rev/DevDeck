@@ -1,6 +1,6 @@
 # Publish DevDeck and its documentation on GitHub Pages on every push to main.
-#   App:  https://<owner>.github.io/<repository>/
-#   Docs: https://<owner>.github.io/<repository>/docs/
+#   App:  https://<owner>.github.io/
+#   Docs: https://<owner>.github.io/docs/
 # One-time setup on GitHub: Settings → Pages → Build and deployment → Source: "GitHub Actions".
 name: GitHub Pages
 
@@ -30,8 +30,8 @@ jobs:
       - run: npm ci
       - name: Build the app and the docs
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
-          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          BASE_PATH: /
+          SITE_URL: https://${{ github.repository_owner }}.github.io
         run: |
           npm run build
           node scripts/build-docs.mjs dist

@@ -8,7 +8,7 @@ Settings page, About panel). Licensed under the **MIT License** (see `LICENSE`).
 | Website | `npm install && npm run build` → static files in `dist/` (set `SITE_URL=https://your-site` for the sitemap and full share links; `BASE_PATH=/sub/` for a sub-folder) |
 | Docker | `docker compose up -d --build` → http://localhost:8080 (or `make docker-up`) — see **docs/docker.md** |
 | Desktop app (Rust/Tauri) | `make desktop` (or `npm run desktop:release`) builds installers for this computer into `release/` — see **DESKTOP.md** |
-| Docs | Published with the app on **GitHub Pages** at `https://ezin-rev.github.io/devdeck/docs/` (`.github/workflows/pages.yml`; `make docs` locally) |
+| Docs | Published with the app on **GitHub Pages** at `https://ezin-rev.github.io/docs/` (`.github/workflows/pages.yml`; `make docs` locally) |
 | Plugins | Install in the app (Settings → Plugins → Install), or `npm run new-plugin -- my-plugin` — see **PLUGINS.md** |
 | Everything else | `make` lists every command · `npm run cli -- help` for the command-line tools |
 

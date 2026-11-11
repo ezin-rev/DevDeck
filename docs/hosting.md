@@ -10,7 +10,7 @@ npm run build            # → dist/  (static files, one folder per page)
 | Setting | Example | What it does |
 |---|---|---|
 | `SITE_URL` | `https://tools.example.com` | Full public address: adds `sitemap.xml`, canonical links, `og:url`, absolute share images |
-| `BASE_PATH` | `/devdeck/` | When the site lives in a sub-folder (GitHub Pages project sites) |
+| `BASE_PATH` | `/` | Set only when the site lives in a sub-folder, e.g. `/devdeck/` |
 
 ```bash
 SITE_URL=https://tools.example.com npm run build
@@ -26,8 +26,8 @@ plugins installed in the app) still open.
 The workflow `.github/workflows/pages.yml` builds DevDeck and this documentation and publishes both on
 every push to `main`:
 
-- the app at `https://<owner>.github.io/<repository>/`
-- the docs at `https://<owner>.github.io/<repository>/docs/`
+- the app at `https://<owner>.github.io/`
+- the docs at `https://<owner>.github.io/docs/`
 
 To switch it on: on GitHub open **Settings → Pages → Build and deployment → Source: GitHub Actions**, then
 push to `main` (or run the workflow from the **Actions** tab). Locally, `make docs` builds the same thing
