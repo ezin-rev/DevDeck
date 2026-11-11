@@ -35,21 +35,36 @@ the desktop window. Changes to `src/` show up immediately; changes to `src-tauri
 
 ## 3. Build the installable app
 
+The easiest way is the **Makefile** (or the same command through npm, handy on Windows):
+
 ```bash
-npm run desktop:build
+make check-desktop          # is everything needed installed? (tells you what to install if not)
+make desktop                # build for THIS computer → release/<system>/
+# same thing without make:  npm run desktop:release
 ```
 
-This builds the website (`npm run build`) and then the app. The results are in
-`src-tauri/target/release/bundle/`:
+| On | Command | What you get in `release/` |
+|---|---|---|
+| macOS | `make desktop-mac` | `mac/DevDeck.app` and `mac/DevDeck_1.0.0_<chip>.dmg` |
+| macOS | `make desktop-mac-universal` | one app + `.dmg` for Apple silicon **and** Intel Macs |
+| Windows | `make desktop-win` (Git Bash/MSYS2) or `npm run desktop:release` | `windows/DevDeck_1.0.0_x64_en-US.msi` and `windows/DevDeck_1.0.0_x64-setup.exe` |
+| Linux | `make desktop-linux` | `linux/DevDeck_1.0.0_<arch>.deb`, `.rpm` and `.AppImage` |
+| any (with Docker) | `make desktop-linux-docker` | the Linux packages, built inside a container |
 
-| System | What you get |
-|---|---|
-| macOS | `macos/DevDeck.app` and `dmg/DevDeck_1.0.0_*.dmg` |
-| Windows | `msi/DevDeck_1.0.0_x64_en-US.msi` and `nsis/DevDeck_1.0.0_x64-setup.exe` |
-| Linux | `deb/`, `rpm/` and `appimage/` packages |
+Each system's app has to be built on that system — except Linux, which `make desktop-linux-docker` can
+build from any computer with Docker. To get **all three** at once, push a version tag and let GitHub
+build them (`.github/workflows/desktop.yml`):
 
-Build each system's app on that system (or with a CI service such as GitHub Actions and
-`tauri-apps/tauri-action`). Only the app for your own system is built locally.
+```bash
+git tag v1.0.0 && git push --tags     # → a draft release with the macOS, Windows and Linux installers
+```
+
+`npm run desktop:build` (plain `tauri build`) still works too; it leaves the results in
+`src-tauri/target/release/bundle/`.
+
+On macOS the `.dmg` is made without the Finder window styling by default, because that step needs a
+logged-in desktop session and fails from background terminals or SSH. Add `--pretty-dmg` to keep it:
+`node scripts/build-desktop.mjs --pretty-dmg`.
 
 To share the macOS app without the "unidentified developer" warning, sign and notarize it with an
 Apple Developer account; on Windows, sign the installer with a code-signing certificate. See

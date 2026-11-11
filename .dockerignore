@@ -1,0 +1,26 @@
+# Keep the Docker build small and fast: only what's needed to build the site/app.
+node_modules
+dist
+release
+src-tauri/target
+src-tauri/gen
+.git
+.github
+.DS_Store
+*.log
+# Craft Anything's own records
+capture
+inbox
+checks
+reference
+attachments
+pinned
+investigation.cany
+craft.json
+feed.json
+questions.json
+usage.json
+assets.json
+transcript.json
+extract-transcript.json
+agent-session.jsonl

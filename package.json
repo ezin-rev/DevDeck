@@ -13,7 +13,9 @@
     "dev:web": "vite",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "desktop:release": "node scripts/build-desktop.mjs",
+    "docs:build": "node scripts/build-docs.mjs dist"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

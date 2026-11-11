@@ -1,0 +1,36 @@
+# DevDeck with Docker Compose.
+#   docker compose up -d --build          → website at http://localhost:8080 (change with DEVDECK_PORT)
+#   docker compose down                   → stop it
+#   docker compose --profile desktop run --rm desktop-linux
+#                                         → build the Linux desktop app (.deb, .rpm, .AppImage) into ./release/linux
+# Settings can go in a .env file next to this one, e.g.  DEVDECK_PORT=9000  SITE_URL=https://tools.example.com
+services:
+  devdeck:
+    build:
+      context: .
+      args:
+        SITE_URL: ${SITE_URL:-}
+    image: devdeck:latest
+    ports:
+      - "${DEVDECK_PORT:-8080}:8080"
+    restart: unless-stopped
+    read_only: true            # the site is static; nginx only needs /tmp
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Builds the Linux desktop app inside a container (works from macOS, Windows or Linux).
+  desktop-linux:
+    profiles: ["desktop"]
+    build:
+      context: .
+      dockerfile: docker/desktop-linux.Dockerfile
+    image: devdeck-desktop-builder:latest
+    volumes:
+      - ./release/linux:/out

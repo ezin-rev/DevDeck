@@ -38,7 +38,9 @@
     <script>
       // Apply saved look before the page draws (same keys as src/prefs.jsx).
       try {
-        var p = Object.assign({ palette: "contrast", mode: "dark", nav: "tabs", view: "cards", panels: "side", density: "comfortable", text: "normal", width: "centered", chrome: "full" }, JSON.parse(localStorage.getItem("aurora-prefs-v2") || "{}"));
+        // defaults: "Modern web" on the website, "Desktop app" (side menu, full width) in the desktop app
+        var desk = "__TAURI_INTERNALS__" in window;
+        var p = Object.assign({ palette: "contrast", mode: "dark", nav: desk ? "side" : "tabs", view: "cards", panels: "side", density: "comfortable", text: "normal", width: desk ? "full" : "centered", chrome: "full" }, JSON.parse(localStorage.getItem("aurora-prefs-v2") || "{}"));
         var d = p.mode === "dark" || (p.mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
         var ds = document.documentElement.dataset;
         ds.theme = d ? "dark" : "light"; ds.palette = p.palette; ds.fx = p.palette === "aurora" ? "vivid" : "soft";

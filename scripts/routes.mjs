@@ -41,8 +41,11 @@ const ROUTES = [...new Set([...CORE_ROUTES, ...groups.filter((g) => g.id === "pl
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const base = readFileSync(`${out}/index.html`, "utf8");
-const abs = (p) => (site ? `${site}${p}` : p);
-const link = (p, text) => `<a href="${esc(p)}">${esc(text)}</a>`;
+// The site's sub-folder when it doesn't live at the top (e.g. GitHub Pages: BASE_PATH=/devdeck/).
+// SITE_URL is the full address including that folder, e.g. https://ezin-rev.github.io/devdeck
+const basePrefix = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
+const abs = (p) => (site ? `${site}${p}` : `${basePrefix}${p}`);
+const link = (p, text) => `<a href="${esc(basePrefix + p)}">${esc(text)}</a>`;
 
 function pageFor(route) {
   const path = MOVED[route] || route;
@@ -69,6 +72,8 @@ function pageFor(route) {
   if (path === "/settings") return { path, moved, title: "Settings – DevDeck", desc: "Choose DevDeck’s theme, layout, code editor, plugins and which tools to show.", noindex: true };
   if (path === "/") return {
     path, moved,
+    // the count is worked out at build time, so adding a plugin updates it
+    desc: `${tools.length} free developer tools that run in your browser: format JSON, decode JWTs, Base64, regex, YAML, certificates, Docker and Kubernetes checks and more.`,
     body: `<h1>DevDeck — every little dev tool, in one friendly place</h1><p>${tools.length} free developer tools that run in your browser: convert, encode, format, validate and generate.</p>`
       + groups.map((g) => `<h2>${link(`/${g.id}`, g.title)}</h2><ul>${g.tools.map((t) => `<li>${link(`/${g.id}/${t.id}`, t.title)} — ${esc(t.desc)}</li>`).join("")}</ul>`).join(""),
     ld: [
@@ -91,9 +96,9 @@ function render(route) {
   // old addresses that redirect, settings and unknown pages shouldn't show up in search results
   if (p.moved || p.noindex) set("name", "robots", "noindex, follow");
   const head = [];
+  set("property", "og:image", abs("/og-image.jpg"));
+  set("name", "twitter:image", abs("/og-image.jpg"));
   if (site) {
-    set("property", "og:image", `${site}/og-image.jpg`);
-    set("name", "twitter:image", `${site}/og-image.jpg`);
     const url = abs(p.path === "/" ? "/" : p.path);
     head.push(`<meta property="og:url" content="${esc(url)}" />`, `<link rel="canonical" href="${esc(url)}" />`);
   }
@@ -117,6 +122,6 @@ if (site) {
   const today = new Date().toISOString().slice(0, 10);
   writeFileSync(`${out}/sitemap.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${indexable.map((r) => `  <url><loc>${esc(abs(r === "/" ? "/" : r))}</loc><lastmod>${today}</lastmod><priority>${r === "/" ? "1.0" : r.split("/").length === 2 ? "0.8" : "0.6"}</priority></url>`).join("\n")}\n</urlset>\n`);
 }
-writeFileSync(`${out}/robots.txt`, `User-agent: *\nAllow: /\nDisallow: /settings\n${site ? `\nSitemap: ${site}/sitemap.xml\n` : ""}`);
+writeFileSync(`${out}/robots.txt`, `User-agent: *\nAllow: /\nDisallow: ${basePrefix}/settings\n${site ? `\nSitemap: ${site}/sitemap.xml\n` : ""}`);
 
 console.log(`Wrote ${ROUTES.length} route pages in ${out}${plugins.length ? ` (${plugins.length} plugin${plugins.length === 1 ? "" : "s"})` : ""}${site ? ` · sitemap and share links use ${site}` : " · set SITE_URL for a sitemap"}`);

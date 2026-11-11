@@ -273,3 +273,71 @@ select.field { cursor: pointer; }
 
 /* desktop app (Tauri): separate pop-out windows are a browser feature */
 :root[data-desktop] .popout { display: none; }
+
+/* F1 help dialog */
+.help-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: center; align-items: flex-start; padding: max(6vh, calc(env(safe-area-inset-top) + 12px)) 12px 12px; background: rgb(5 8 20 / 0.5); backdrop-filter: blur(6px); animation: fade 0.15s ease; }
+.help { width: 100%; max-width: 860px; max-height: 88vh; display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: 18px; background: var(--card); box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.5); overflow: hidden; }
+.help-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.help-head strong { display: inline-flex; align-items: center; gap: 8px; font-size: 17px; color: var(--text-strong); }
+.help-tool { display: flex; align-items: flex-start; gap: 10px; padding: 12px 18px; font-size: 14px; background: color-mix(in srgb, var(--tone) 8%, transparent); border-bottom: 1px solid var(--line); }
+.help-tool strong { color: var(--text-strong); }
+.help-body { display: grid; grid-template-columns: 210px 1fr; min-height: 0; overflow: hidden; flex: 1; }
+.help-nav { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-right: 1px solid var(--line); overflow-y: auto; }
+.help-topic { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.help-topic:hover { background: var(--hover); color: var(--text); }
+.help-topic.on { background: var(--accent-soft); color: var(--text-strong); }
+.help-content { padding: 16px 20px; overflow-y: auto; }
+.help-content h3 { display: flex; align-items: center; gap: 8px; font-size: 18px; color: var(--text-strong); margin-bottom: 10px; }
+.help-content h4 { margin: 16px 0 6px; font-size: 14px; color: var(--text-strong); }
+.help-content dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.help-content dt { font-weight: 700; color: var(--text-strong); font-size: 14px; }
+.help-content dd { margin: 2px 0 0; color: var(--text); font-size: 14px; line-height: 1.5; }
+.help-content td { white-space: normal; vertical-align: top; }
+.help-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); }
+.footer-help { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.footer-help:hover { color: var(--accent-ink); }
+.footer-help kbd { font-size: 10px; padding: 2px 5px; }
+@media (max-width: 640px) {
+  .help-body { grid-template-columns: 1fr; }
+  .help-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .help-topic { white-space: nowrap; }
+}
+
+/* Settings → Plugins: installed-by-you actions and the installer */
+.plugin-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: auto; padding-top: 6px; border-top: 1px dashed var(--line); }
+.plugin-foot .muted { margin-right: auto; }
+.btn.danger:hover:not(:disabled) { color: #dc2626; border-color: #dc2626; }
+.plugin-installer { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding: 14px 16px; border: 1px dashed var(--line-strong); border-radius: var(--r-m); }
+.plugin-preview { padding: 12px 14px; border: 1px solid var(--accent-ink); border-radius: var(--r-m); background: var(--accent-soft); }
+.plugin-preview p { margin: 4px 0; }
+
+/* ---------- top bar fixed to the top of the window ---------- */
+/* The bar is fixed (not "sticky"), so it never moves — not even with the elastic bounce of Mac
+   trackpads and the desktop app. The page keeps a gap of the bar's height at the top; the exact height
+   is measured by the app (--topbar-h), with close estimates for the first moment. */
+html, body { overscroll-behavior-y: none; }   /* no rubber-band bounce at the top/bottom of the page */
+body { overflow-x: clip; }
+:root { --topbar-h: 113px; }
+:root[data-nav="side"], :root[data-nav="rail"], :root[data-nav="minimal"] { --topbar-h: 65px; }
+:root[data-chrome="slim"] { --topbar-h: 89px; }
+:root[data-chrome="slim"][data-nav="side"], :root[data-chrome="slim"][data-nav="rail"], :root[data-chrome="slim"][data-nav="minimal"] { --topbar-h: 51px; }
+.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 40; }
+.app:not(.compact-app) { padding-top: var(--topbar-h); }
+.group-section, .cert-card, #manage-tools, #plugins { scroll-margin-top: calc(var(--topbar-h, 112px) + 16px); }
+
+/* ---------- side menu: folding categories ---------- */
+[data-nav="side"] .sidenav, [data-nav="rail"] .sidenav { top: var(--topbar-h, 65px); max-height: calc(100vh - var(--topbar-h, 65px)); }
+@supports (height: 100dvh) { [data-nav="side"] .sidenav, [data-nav="rail"] .sidenav { max-height: calc(100dvh - var(--topbar-h, 65px)); } }
+.side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 6px 10px; }
+.side-all { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.side-all:hover { color: var(--text-strong); background: var(--hover); }
+.side-row { display: flex; align-items: center; gap: 2px; }
+.side-row .side-link { flex: 1; min-width: 0; }
+.side-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-count { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.side-toggle { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.side-toggle:hover { background: var(--hover); color: var(--text-strong); }
+.side-group.open > .side-row .side-link { color: var(--text-strong); }
+/* the slim icon bar shows icons only: no folding there */
+[data-nav="rail"] .side-head, [data-nav="rail"] .side-toggle, [data-nav="rail"] .side-count { display: none; }
+[data-nav="rail"] .side-row { display: contents; }

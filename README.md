@@ -5,17 +5,48 @@ Settings page, About panel). Licensed under the **MIT License** (see `LICENSE`).
 
 | | |
 |---|---|
-| Website | `npm install && npm run build` → static files in `dist/` (set `SITE_URL=https://your-site` for the sitemap and full share links) |
-| Desktop app (Rust/Tauri) | `npm run desktop:dev` to try it, `npm run desktop:build` for installers — see **DESKTOP.md** |
-| Plugins | `npm run new-plugin -- my-plugin` — see **PLUGINS.md** |
-| Command line | `npm run cli -- help` |
+| Website | `npm install && npm run build` → static files in `dist/` (set `SITE_URL=https://your-site` for the sitemap and full share links; `BASE_PATH=/sub/` for a sub-folder) |
+| Docker | `docker compose up -d --build` → http://localhost:8080 (or `make docker-up`) — see **docs/docker.md** |
+| Desktop app (Rust/Tauri) | `make desktop` (or `npm run desktop:release`) builds installers for this computer into `release/` — see **DESKTOP.md** |
+| Docs | Published with the app on **GitHub Pages** at `https://ezin-rev.github.io/devdeck/docs/` (`.github/workflows/pages.yml`; `make docs` locally) |
+| Plugins | Install in the app (Settings → Plugins → Install), or `npm run new-plugin -- my-plugin` — see **PLUGINS.md** |
+| Everything else | `make` lists every command · `npm run cli -- help` for the command-line tools |
 
-**Plugins.** Tools can be added as plugins: a folder in `src/plugins/<id>/` with `plugin.json` (name,
-author, tools) and `index.jsx` (`definePlugin(...)` from `src/plugin-sdk.jsx`). A tool is either a
-"transform" (text in → text out; DevDeck draws the screen) or its own React component. Plugin tools get
-a **Plugins** tab, search, pages at `/plugins/<tool-id>` (built with titles and SEO data), tool-set levels,
-and an on/off switch in Settings → Plugins. The example plugin `text-extras` adds **Slugify** and
-**Unicode Inspector**. A failing plugin is skipped without breaking the site. Full guide: `PLUGINS.md`.
+**Help (F1).** Press **F1** or **?** anywhere (or Help in the footer) for
+"How to use DevDeck": getting around, Smart Paste, working with a tool, keyboard shortcuts, customizing,
+plugins and privacy — starting with tips for the tool you're on. Links to the full docs. (`src/help.jsx`)
+
+**Dynamic numbers and tabs.** The home page's "N free tools" is counted live (built-in tools + plugins,
+minus switched-off ones), and the build writes the same count into the home page's search description.
+A group's tab (and side-menu entry) only shows while at least one of its tools is switched on.
+
+**Plugins.** Two kinds. *Installable plugins* are one `.js` file that anyone adds in **Settings → Plugins →
+Install** — from a web address, a file or pasted code — with a preview and a warning before installing,
+**Update** for web-address plugins and **Uninstall**; they're kept on the device (`src/user-plugins.js`,
+loaded before the app first draws) and the example `public/plugin-examples/word-tools.js` installs with one
+click ("Try the example plugin"). *Built-in plugins* are folders in `src/plugins/<id>/` with `plugin.json`
+and `index.jsx` (`definePlugin(...)` from `src/plugin-sdk.jsx`); the example `text-extras` adds **Slugify**
+and **Unicode Inspector**. Either kind of tool is a "transform" (text in → text out; DevDeck draws the
+screen) or its own React component. Plugin tools get the Plugins tab, search, pages at `/plugins/<tool-id>`,
+tool-set levels and an on/off switch. A failing plugin is skipped without breaking the site. Guide: `PLUGINS.md`.
+
+**Docker.** `Dockerfile` (Node builds, `nginx-unprivileged` serves on 8080 as non-root, read-only),
+`docker/nginx.conf` (page folders, app-shell fallback, long caching for hashed files, gzip, security headers,
+`/healthz`), `docker-compose.yml` (website service + a `desktop` profile that builds the Linux app),
+`.dockerignore`. Not run here (no Docker on this machine); the compose file passes DevDeck's own Compose Validator.
+
+**Makefile & desktop builds.** `make help` lists everything: `web`, `docs`, `docker-up/down/logs`,
+`check-desktop`, `desktop-dev`, `desktop` (this computer), `desktop-mac`, `desktop-mac-universal`, `desktop-win`,
+`desktop-linux`, `desktop-linux-docker` (Linux packages from any computer), `test`, `clean`. The desktop
+targets use `scripts/build-desktop.mjs` (checks prerequisites, builds, collects installers into
+`release/<system>/`), which also runs without make (`npm run desktop:release`). Pushing a `v*` tag builds all
+three systems on GitHub (`.github/workflows/desktop.yml`).
+
+**Docs on GitHub Pages.** `docs/*.md` + `PLUGINS.md` + `DESKTOP.md` → `dist/docs/*.html` via
+`scripts/build-docs.mjs` (uses `marked`). `.github/workflows/pages.yml` publishes the app at
+`/<repo>/` and the docs at `/<repo>/docs/` on every push to `main` (turn on Settings → Pages → Source:
+GitHub Actions). The app's base path is configurable (`BASE_PATH`), and the router, service worker,
+manifest, share tags and SEO links all follow it.
 
 **Custom theme.** Settings → Theme → *Custom* (or "Customize this theme") lets visitors set the nine base
 colours separately for light and dark mode, plus roundness, border strength, category-colour strength,
@@ -58,6 +89,16 @@ lets visitors pick:
   descriptions, full width, no welcome banner or background glow), Desktop app (side menu, full width),
   Dev workspace (slim icon bar, compact list), App launcher (big tiles) and Focus (search only).
   When the welcome banner is off, the home page has no second search box — the top-bar search is used.
+  The **desktop app** starts with the Desktop app layout (side menu, full width); the website starts with
+  Modern web (`DEFAULT_PRESET` in `src/prefs.jsx`, mirrored in the `index.html` start-up script).
+- **Top bar** is fixed to the top of the window (`position: fixed`, not sticky), so it never moves —
+  also not with the elastic bounce of Mac trackpads or the desktop app, which is switched off
+  (`overscroll-behavior: none`). The page keeps a gap of the bar's height (`--topbar-h`, measured by the
+  app, with per-layout estimates for the first moment); the side menu and jump links use it too. Help is
+  F1/? and the footer link (no top-bar button).
+- **Side menu** (Desktop app layout): every category starts **open**; each folds with its arrow and shows
+  its tool count; **Expand all / Collapse all** at the top; choices are remembered (`aurora-side-open-v2`),
+  and opening a tool opens its category.
 - **Fine-tuning**: navigation (top tabs, side menu, icon bar, search only); cards, tiles or
   compact list; tool boxes side by side or stacked; roomy or compact spacing; normal or large
   text; welcome banner on/off; centered or full width; top bar & headers full or slim. Side menu and

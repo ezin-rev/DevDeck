@@ -117,9 +117,11 @@ input.field, textarea.field { -webkit-appearance: none; appearance: none; }
   .stats { grid-template-columns: 1fr; }
 }
 
-/* Phones turned sideways: little height, so keep the bar slim */
+/* Phones turned sideways: little height — the bar stays pinned but gets slimmer */
 @media (max-height: 480px) and (orientation: landscape) {
-  .topbar { position: static; }
+  .topbar-row { height: 50px; }
+  :root .tabs { padding-bottom: 6px; }
+  :root .tabs .tab { height: 30px; }
   .palette-list { max-height: 60vh; }
   textarea.field { max-height: 70vh; }
 }

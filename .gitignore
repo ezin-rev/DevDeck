@@ -27,3 +27,8 @@ pnpm-debug.log*
 
 # Operating system files
 .DS_Store
+
+# Desktop app build output and release installers
+/release/
+/src-tauri/target/
+/src-tauri/gen/

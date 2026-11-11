@@ -42,7 +42,8 @@ export function validateCompose(text) {
     if (!isObj(s)) { add("error", at(), "A service should be a set of settings (image:, ports: …)."); continue; }
     for (const k of Object.keys(s)) if (!SERVICE_KEYS.includes(k) && !k.startsWith("x-")) add("error", at(k), `“${k}” isn’t a service setting${closest(k, SERVICE_KEYS) ? ` — did you mean “${closest(k, SERVICE_KEYS)}”?` : ""}`);
     if (!s.image && !s.build && !s.extends && !s.provider) add("error", at(), "Needs an image: or a build: to know what to run.");
-    if (typeof s.image === "string") {
+    // With build:, image: only names the picture built from this folder, so a missing or :latest tag is fine.
+    if (typeof s.image === "string" && !s.build) {
       const last = s.image.split("/").pop();
       if (!last.includes(":") && !s.image.includes("@")) add("warning", at("image"), `“${s.image}” has no version tag, so it means :latest — pin a version for repeatable deploys.`);
       else if (/:latest$/.test(s.image)) add("warning", at("image"), "“:latest” can change under you — pin a version.");
@@ -54,7 +55,10 @@ export function validateCompose(text) {
     for (const [i, p] of (Array.isArray(s.ports) ? s.ports : s.ports != null ? [s.ports] : []).entries()) {
       const where = at(`ports[${i}]`);
       if (isObj(p)) { if (p.target == null) add("error", where, "The long port syntax needs target:."); if (p.published != null) { const k = `${p.host_ip || "*"}:${p.published}/${p.protocol || "tcp"}`; (hostPorts.get(k) || hostPorts.set(k, []).get(k)).push(name); } continue; }
-      const m = String(p).match(PORT_RE);
+      // ${VAR:-8080} → check with its default value; ${VAR} without a default can't be checked here.
+      const raw = String(p);
+      if (/\$\{?\w+\}?/.test(raw.replace(/\$\{\w+:?-[^}]*\}/g, ""))) continue;
+      const m = raw.replace(/\$\{\w+:?-([^}]*)\}/g, "$1").match(PORT_RE);
       if (!m) { add("error", where, `“${p}” isn’t a valid port mapping (examples: "8080:80", "127.0.0.1:5432:5432", "53:53/udp").`); continue; }
       if (typeof p === "number") add("info", where, "Write ports in quotes, like \"8080:80\" — some YAML readers turn unquoted values with colons into numbers.");
       if (m[2]) { const k = `${m[1] || "*"}:${m[2]}/${m[4] || "tcp"}`; (hostPorts.get(k) || hostPorts.set(k, []).get(k)).push(name); }

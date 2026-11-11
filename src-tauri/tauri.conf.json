@@ -32,7 +32,7 @@
     "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "Friendly developer tools that work offline",
-    "longDescription": "DevDeck: 70+ developer tools — JSON, YAML, JWT, Base64, certificates, regex, Docker and Kubernetes checks and more — in one desktop app. Everything runs on your computer.",
+    "longDescription": "DevDeck: developer tools — JSON, YAML, JWT, Base64, certificates, regex, Docker and Kubernetes checks and more — in one desktop app. Everything runs on your computer.",
     "copyright": "© 2026 ezin-rev — MIT License",
     "license": "MIT",
     "icon": [

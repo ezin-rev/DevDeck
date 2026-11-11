@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { House, Search, Settings, Star, History, WandSparkles, LayoutDashboard, Github, Sparkles, ArrowRight, ArrowUpRight, ChevronRight, ChevronDown, ShieldCheck, CornerDownLeft, X, SquareArrowOutUpRight, PictureInPicture2, Puzzle, Code } from "lucide-react";
+import { House, Search, Settings, Star, History, WandSparkles, LayoutDashboard, Github, ChevronsDownUp, ChevronsUpDown, Sparkles, ArrowRight, ArrowUpRight, ChevronRight, ChevronDown, ShieldCheck, CornerDownLeft, X, SquareArrowOutUpRight, PictureInPicture2, Puzzle, Code } from "lucide-react";
 import { GROUPS, ALL_TOOLS, TOOL_SETS, PLUGINS } from "./data.js";
 import { createRoot } from "react-dom/client";
 import { usePath, Link, navigate, href } from "./router.jsx";
@@ -7,7 +7,8 @@ import { sendTo } from "./handoff.js";
 import { usePins, useRecent, togglePin, markUsed, clearRecent, useHidden, setHidden, toggleHidden, useCodeEditor, setCodeEditor, useEditorKeys, setEditorKeys } from "./store.js";
 import { SHORTCUTS } from "./keymap.js";
 import { isDesktop, invoke } from "./desktop.js";
-import { usePrefs, ThemePicker, ThemeEditor, LayoutPicker } from "./prefs.jsx";
+import { HelpDialog, DOCS_URL } from "./help.jsx";
+import { USER_VIEWS, USER_PLUGIN_ERRORS, evaluatePlugin, fetchPluginCode, installPlugin, uninstallPlugin, listUserPlugins } from "./user-plugins.js";import { usePrefs, ThemePicker, ThemeEditor, LayoutPicker } from "./prefs.jsx";
 
 const byPath = (p) => ALL_TOOLS.find((t) => t.path === p);
 
@@ -20,7 +21,7 @@ const loadViews = () => (viewsPromise ||= Promise.all([
   import("./more-tools.jsx").then((m) => m.MORE_TOOL_VIEWS), import("./media.jsx").then((m) => m.MEDIA_VIEWS), import("./net.jsx").then((m) => m.NET_VIEWS),
   import("./ops.jsx").then((m) => m.OPS_VIEWS), import("./keys.jsx").then((m) => m.KEY_VIEWS),
   loadPluginViews(),
-]).then((all) => Object.assign({}, ...all)));
+]).then((all) => Object.assign({}, ...all, USER_VIEWS)));
 
 // Plugins (src/plugins/<id>/index.jsx): each default-exports definePlugin(…) → { id, views }.
 // A plugin that fails to load is skipped (and reported in the console) so it can't break the site.
@@ -57,10 +58,15 @@ const BLURBS = {
 // such as "epoch" or "k8s". Every word must match; tools whose title matches come first.
 const splitWords = (s) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const stem = (w) => (w.length > 4 ? w.replace(/(ting|ing|ers|er|ed|es|s)$/, "") : w);
-const SEARCH_INDEX = ALL_TOOLS.map((t) => ({
-  tool: t,
-  fields: [[splitWords(`${t.title} ${t.short} ${t.short.replace(/\s+/g, "")}`), 4], [splitWords(t.words), 3], [splitWords(t.group.title), 2], [splitWords(t.desc), 1]],
-}));
+// Rebuilt whenever the tool list changes (plugins installed in the app are added after start-up).
+let searchIndex = { size: -1, list: [] };
+const SEARCH_INDEX_FOR = () => {
+  if (searchIndex.size !== ALL_TOOLS.length) searchIndex = { size: ALL_TOOLS.length, list: ALL_TOOLS.map((t) => ({
+    tool: t,
+    fields: [[splitWords(`${t.title} ${t.short} ${t.short.replace(/\s+/g, "")}`), 4], [splitWords(t.words), 3], [splitWords(t.group.title), 2], [splitWords(t.desc), 1]],
+  })) };
+  return searchIndex.list;
+};
 
 // Tools the visitor switched off in Settings → Manage tools are left out of lists and search.
 const visibleIn = (group, hidden) => group.tools.filter((t) => !hidden.includes(`/${group.id}/${t.id}`));
@@ -69,7 +75,7 @@ function filterTools(q, hidden = []) {
   const terms = splitWords(q);
   if (!terms.length) return ALL_TOOLS.filter((t) => !hidden.includes(t.path));
   const scored = [];
-  for (const { tool, fields } of SEARCH_INDEX) {
+  for (const { tool, fields } of SEARCH_INDEX_FOR()) {
     if (hidden.includes(tool.path)) continue;
     let score = 0;
     const all = terms.every((term) => {
@@ -128,11 +134,25 @@ function MenuButton({ icon: Icon, label, title, children }) {
 }
 
 /* ---------- navigation ---------- */
-const TABS = [{ id: "", title: "All tools", icon: House, tone: "blue" }, ...GROUPS];
+// Built fresh on each render: a group only gets a tab (and a side-menu entry) while at least one of
+// its tools is switched on, and plugins installed in the app appear as soon as they're added.
+const ALL_TAB = { id: "", title: "All tools", icon: House, tone: "blue" };
+const tabsFor = (hidden) => [ALL_TAB, ...GROUPS.filter((g) => g.tools.some((t) => !hidden.includes(`/${g.id}/${t.id}`)))];
 const tabActive = (t, path) => (t.id ? path === `/${t.id}` || path.startsWith(`/${t.id}/`) : path === "/");
 
 function TopBar({ path, prefsApi, openPalette }) {
+  // The bar stays pinned to the top; its real height (it changes with layout, slim bar, tabs, notch)
+  // is shared as --topbar-h so the side menu and jump links sit right below it.
+  const barRef = useRef(null);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty("--topbar-h", `${Math.round(el.getBoundingClientRect().height)}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const { prefs, set, reset, applyPreset } = prefsApi;
+  const hidden = useHidden();
   // On phones and tablets the tab bar scrolls sideways: keep the current group's tab in view.
   const tabsRef = useRef(null);
   useEffect(() => {
@@ -156,7 +176,7 @@ function TopBar({ path, prefsApi, openPalette }) {
     return () => { bar.removeEventListener("scroll", update); window.removeEventListener("resize", update); };
   }, []);
   return (
-    <header className="topbar">
+    <header className="topbar" ref={barRef}>
       <div className="topbar-row">
         <Link to="/" className="logo">
           <span className="logo-mark"><Sparkles size={16} /></span>
@@ -185,7 +205,7 @@ function TopBar({ path, prefsApi, openPalette }) {
       </div>
       <nav className={`tabs ${edges}`} aria-label="Tool groups" ref={tabsRef}>
         {/* One row of rounded tabs, each with its group's icon; each group's page lists its tools. */}
-        {TABS.map((t) => {
+        {tabsFor(hidden).map((t) => {
           const to = t.id ? `/${t.id}` : "/";
           const active = tabActive(t, path);
           const Icon = t.icon;
@@ -200,22 +220,51 @@ function TopBar({ path, prefsApi, openPalette }) {
   );
 }
 
+// Side menu (Desktop app / Dev workspace layouts). Each category folds open and shut; the choice is
+// remembered. Until the visitor folds something, every category is open.
+const SIDE_KEY = "aurora-side-open-v2"; // v2: everything starts open (v1 opened only the current category)
 function SideNav({ path }) {
   const hidden = useHidden();
+  const tabs = tabsFor(hidden);
+  const groupIds = tabs.filter((t) => t.id).map((t) => t.id);
+  const current = groupIds.find((id) => path === `/${id}` || path.startsWith(`/${id}/`));
+  const [open, setOpen] = useState(() => { try { const v = JSON.parse(localStorage.getItem(SIDE_KEY)); return Array.isArray(v) ? v : null; } catch { return null; } });
+  const isOpen = (id) => (open ? open.includes(id) : true);
+  const save = (next) => { setOpen(next); try { localStorage.setItem(SIDE_KEY, JSON.stringify(next)); } catch {} };
+  const toggle = (id) => { const now = groupIds.filter(isOpen); save(now.includes(id) ? now.filter((x) => x !== id) : [...now, id]); };
+  // Going to a tool in a folded category opens that category.
+  useEffect(() => { if (current && open && !open.includes(current)) save([...open, current]); }, [current]); // eslint-disable-line react-hooks/exhaustive-deps
+  const allOpen = groupIds.every(isOpen);
   return (
     <aside className="sidenav" aria-label="All tools by group">
-      {TABS.map((t) => {
+      <div className="side-head">
+        <span className="panel-label">Categories</span>
+        <button className="side-all" onClick={() => save(allOpen ? [] : groupIds)} title={allOpen ? "Fold every category" : "Open every category"}>
+          {allOpen ? <><ChevronsDownUp size={14} /> Collapse all</> : <><ChevronsUpDown size={14} /> Expand all</>}
+        </button>
+      </div>
+      {tabs.map((t) => {
         const to = t.id ? `/${t.id}` : "/";
         const Icon = t.icon;
         const group = GROUPS.find((g) => g.id === t.id);
+        const tools = group ? visibleIn(group, hidden) : [];
+        const expanded = group && isOpen(group.id);
         return (
-          <div key={to} className="side-group">
-            <Link to={to} title={t.title} className={`side-link tone-${t.tone} ${tabActive(t, path) && path === to ? "active" : ""} ${tabActive(t, path) ? "within" : ""}`}>
-              <span className="mini-tile"><Icon size={15} /></span> <span className="side-label">{t.title}</span>
-            </Link>
-            {group && (
-              <ul className="side-tools">
-                {visibleIn(group, hidden).map((tool) => {
+          <div key={to} className={`side-group ${expanded ? "open" : ""}`}>
+            <div className="side-row">
+              <Link to={to} title={t.title} className={`side-link tone-${t.tone} ${tabActive(t, path) && path === to ? "active" : ""} ${tabActive(t, path) ? "within" : ""}`}>
+                <span className="mini-tile"><Icon size={15} /></span> <span className="side-label">{t.title}</span>
+                {group && <span className="side-count">{tools.length}</span>}
+              </Link>
+              {group && (
+                <button className="side-toggle" onClick={() => toggle(group.id)} aria-expanded={expanded} aria-controls={`side-${group.id}`} title={expanded ? `Fold ${group.title}` : `Show ${group.title} tools`}>
+                  <ChevronDown size={15} className={expanded ? "chev open" : "chev"} />
+                </button>
+              )}
+            </div>
+            {expanded && (
+              <ul className="side-tools" id={`side-${group.id}`}>
+                {tools.map((tool) => {
                   const tp = `/${group.id}/${tool.id}`;
                   return <li key={tp}><Link to={tp} className={`side-tool ${path === tp ? "active" : ""}`}>{tool.short}</Link></li>;
                 })}
@@ -369,7 +418,8 @@ function Home({ openPalette, showHero }) {
   return (
     <>
       {showHero ? <section className="hero">
-        <span className="eyebrow"><ShieldCheck size={14} /> {ALL_TOOLS.length} free tools · everything stays in your browser</span>
+        {/* counted live: built-in tools + plugins, minus any switched off in Settings */}
+        <span className="eyebrow"><ShieldCheck size={14} /> {ALL_TOOLS.length - hidden.length} free {ALL_TOOLS.length - hidden.length === 1 ? "tool" : "tools"} · everything stays in your browser</span>
         <h1>Every little dev tool,<br /><span className="grad">in one friendly place.</span></h1>
         <p className="hero-sub">Convert, encode, format and generate — no sign-up, no uploads. Built for developers, simple enough for everyone.</p>
         <div className="hero-search">
@@ -669,13 +719,29 @@ function DesktopInfo() {
 // Installed plugins (src/plugins/*): switch each one on or off; switching off hides all its tools.
 function PluginsPanel() {
   const hidden = useHidden();
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+  const update = async (m) => {
+    setBusy(m.id); setNote("");
+    try { const code = await fetchPluginCode(m.url); const res = await evaluatePlugin(code); installPlugin({ ...res, code, source: "url", url: m.url }); location.reload(); }
+    catch (e) { setNote(`${m.name}: ${e.message}`); setBusy(""); }
+  };
+  const remove = (m) => {
+    if (!window.confirm(`Uninstall “${m.name}”? Its tools will be removed from DevDeck on this device.`)) return;
+    uninstallPlugin(m.id);
+    setHidden(hidden.filter((p) => !m.tools.some((t) => p === `/plugins/${t.id}`)));
+    location.reload();
+  };
   return (
     <div className="panel" id="plugins">
       <div className="panel-head">
         <span className="panel-label"><Puzzle size={14} /> Plugins — {PLUGINS.length} installed</span>
-        <a className="see-all" href={`${REPO_URL}/blob/main/PLUGINS.md`} target="_blank" rel="noopener noreferrer">How to make a plugin ↗</a>
+        <a className="see-all" href={`${DOCS_URL}plugins.html`} target="_blank" rel="noopener noreferrer">How to make a plugin ↗</a>
       </div>
-      {PLUGINS.length === 0 && <p className="muted small">No plugins yet. Add a folder in src/plugins/ (see PLUGINS.md) and rebuild.</p>}
+      {PLUGINS.length === 0 && <p className="muted small">No plugins yet — install one below.</p>}
+      {USER_PLUGIN_ERRORS.map((e) => (
+        <p key={e.id} className="error">“{e.name}” couldn’t load: {e.message} <button className="inline-link as-btn" onClick={() => { uninstallPlugin(e.id); location.reload(); }}>Uninstall it</button></p>
+      ))}
       <div className="plugin-list">
         {PLUGINS.map((m) => {
           const paths = m.tools.map((t) => `/plugins/${t.id}`);
@@ -692,10 +758,83 @@ function PluginsPanel() {
                 {m.tools.map((t) => <Link key={t.id} to={`/plugins/${t.id}`} className="chip tone-violet">{t.title}</Link>)}
                 {m.homepage && <a className="see-all" href={m.homepage} target="_blank" rel="noopener noreferrer">Website ↗</a>}
               </div>
+              <div className="plugin-foot">
+                <span className="muted small">{m.user ? `Installed by you${m.source === "url" ? " from a web address" : m.source === "file" ? " from a file" : ""}` : "Built in (part of this DevDeck)"}</span>
+                {m.user && m.url && <button className="btn ghost" disabled={busy === m.id} onClick={() => update(m)}>{busy === m.id ? "Updating…" : "Update"}</button>}
+                {m.user && <button className="btn ghost danger" onClick={() => remove(m)}>Uninstall</button>}
+              </div>
             </div>
           );
         })}
       </div>
+      {note && <p className="error">{note}</p>}
+      <PluginInstaller />
+    </div>
+  );
+}
+
+// Install a plugin from a web address, a file or pasted code: check it, show what it adds, then save it.
+function PluginInstaller() {
+  const [how, setHow] = useState("url");
+  const [url, setUrl] = useState("");
+  const [code, setCode] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const exampleUrl = new URL(href("/plugin-examples/word-tools.js"), location.href).href;
+  const check = async (text, source, from) => {
+    setErr(""); setPreview(null); setBusy(true);
+    try {
+      const res = await evaluatePlugin(text);
+      if (PLUGINS.some((p) => p.id === res.manifest.id && !p.user)) throw new Error(`“${res.manifest.id}” is already built into DevDeck.`);
+      const existing = listUserPlugins().find((p) => p.id === res.manifest.id);
+      setPreview({ ...res, code: text, source, url: from, replaces: existing });
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const fromUrl = async (u) => { setErr(""); setBusy(true); try { await check(await fetchPluginCode(u), "url", u); } catch (e) { setErr(e.message); setBusy(false); } };
+  return (
+    <div className="plugin-installer">
+      <div className="panel-head">
+        <span className="panel-label">Install a plugin</span>
+        <button className="btn ghost" onClick={() => { setHow("url"); setUrl(exampleUrl); fromUrl(exampleUrl); }}>Try the example plugin</button>
+      </div>
+      <p className="muted small">⚠ Plugins run code inside DevDeck, with the same access as DevDeck itself. Only install plugins from people you trust.</p>
+      <div className="segmented" role="radiogroup" aria-label="Install from">
+        {[["url", "Web address"], ["file", "File"], ["code", "Paste code"]].map(([v, l]) => (
+          <button key={v} role="radio" aria-checked={how === v} className={how === v ? "on" : ""} onClick={() => { setHow(v); setErr(""); setPreview(null); }}>{l}</button>
+        ))}
+      </div>
+      {how === "url" && (
+        <div className="request-line">
+          <input className="field mono grow-field" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://raw.githubusercontent.com/you/plugin/main/plugin.js" aria-label="Plugin address" />
+          <button className="btn" disabled={busy || !/^https?:\/\//.test(url.trim())} onClick={() => fromUrl(url.trim())}>{busy ? "Checking…" : "Check"}</button>
+        </div>
+      )}
+      {how === "file" && (
+        <label className="dropzone">
+          <strong>Choose a plugin file (.js)</strong>
+          <span className="muted small">It’s read on this device</span>
+          <input type="file" accept=".js,.mjs,text/javascript" hidden onChange={async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) check(await f.text(), "file", ""); }} />
+        </label>
+      )}
+      {how === "code" && <>
+        <textarea className="field mono" rows={8} value={code} onChange={(e) => setCode(e.target.value)} spellCheck={false} placeholder={'export default (sdk) => ({\n  id: "my-plugin", name: "My Plugin", version: "1.0.0",\n  tools: [{ id: "shout", title: "Shout", desc: "Make text loud", transform: (s) => s.toUpperCase() }],\n});'} />
+        <button className="btn" disabled={busy || !code.trim()} onClick={() => check(code, "code", "")}>{busy ? "Checking…" : "Check"}</button>
+      </>}
+      {err && <p className="error">{err}</p>}
+      {preview && (
+        <div className="plugin-preview">
+          <strong>{preview.manifest.name}</strong> <span className="muted small">v{preview.manifest.version}{preview.manifest.author ? ` · by ${preview.manifest.author}` : ""}</span>
+          {preview.manifest.description && <p className="muted small">{preview.manifest.description}</p>}
+          <p className="small">Adds: {preview.manifest.tools.map((t) => t.title).join(", ")}</p>
+          {preview.replaces && <p className="muted small">This replaces the installed version {preview.replaces.version}.</p>}
+          <div className="options-row">
+            <button className="btn primary" onClick={() => { try { installPlugin(preview); location.reload(); } catch (e) { setErr(e.message); } }}>Install</button>
+            <button className="btn ghost" onClick={() => setPreview(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -766,6 +905,7 @@ export default function App() {
   const path = usePath();
   const prefsApi = usePrefs();
   const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
   // After moving to another page, put keyboard/screen-reader focus on the new content (not on first load).
   const mainRef = useRef(null);
   const firstRender = useRef(true);
@@ -785,6 +925,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((o) => !o); }
+      else if (e.key === "F1" || (e.key === "?" && !e.metaKey && !e.ctrlKey && !isTyping())) { e.preventDefault(); setPalette(false); setHelp((o) => !o); }
       else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping()) { e.preventDefault(); setPalette(true); }
     };
     window.addEventListener("keydown", onKey);
@@ -817,11 +958,14 @@ export default function App() {
       <footer className="footer">
         <span title="Network & APIs tools contact the address you enter; everything else stays on your device."><ShieldCheck size={14} /> Runs in your browser</span>
         <span className="footer-links">
+          <button className="as-btn footer-help" onClick={() => setHelp(true)}>Help <kbd>F1</kbd></button>
+          <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">Docs</a>
           <Link to="/settings">Settings</Link>
           <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="credit"><Github size={14} /> GitHub</a>
         </span>
       </footer>
       <Palette open={palette} onClose={() => setPalette(false)} />
+      <HelpDialog open={help} onClose={() => setHelp(false)} tool={tool} />
     </div>
   );
 }

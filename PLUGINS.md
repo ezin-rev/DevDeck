@@ -1,6 +1,83 @@
-# Writing DevDeck plugins
+# Plugins
 
-A plugin adds tools to DevDeck. Each plugin is a folder in `src/plugins/` with two files:
+A plugin adds tools to DevDeck. There are two kinds:
+
+| | **Installable plugin** (one `.js` file) | **Built-in plugin** (a folder in `src/plugins/`) |
+|---|---|---|
+| Who adds it | Anyone, in **Settings → Plugins → Install** | The person who builds the site |
+| How | From a web address, a file or pasted code — no rebuild | `npm run build` |
+| Kept | On that device (until uninstalled) | In the site for everyone |
+| Remove | **Uninstall** in Settings → Plugins | Delete the folder and rebuild |
+
+Both kinds can be switched on or off in Settings → Plugins, and their tools appear in the **Plugins**
+tab, search, the home page and Settings → Manage tools.
+
+## Installing a plugin
+
+1. Open **Settings → Plugins → Install a plugin**.
+2. Choose **Web address** (e.g. a GitHub *Raw* link), **File** (a `.js` file) or **Paste code**, and press
+   **Check**. DevDeck runs the plugin's checks and shows its name, author and the tools it adds.
+3. Press **Install**. The page reloads with the new tools.
+
+Use **Update** (for plugins installed from a web address) to fetch the newest version, and **Uninstall**
+to remove it. **Try the example plugin** installs *Word Tools* (Word Frequency + Reading Time).
+
+> ⚠ A plugin runs code inside DevDeck, with the same access as DevDeck itself. Only install plugins from
+> people you trust. A plugin that fails to load is skipped and listed in Settings with an Uninstall button.
+
+## Writing an installable plugin (one file)
+
+A single JavaScript module. The default export is a function that receives `sdk` — DevDeck's plugin kit —
+and returns the plugin. No build step: tools with their own screen use `sdk.h` (React's
+`createElement`) instead of JSX.
+
+```js
+// my-plugin.js
+export default (sdk) => ({
+  id: "shouty",                     // lower-case letters, digits and dashes
+  name: "Shouty Tools",
+  version: "1.0.0",
+  author: "Your Name",
+  description: "Makes text louder.",
+  homepage: "https://example.com/shouty",
+  tools: [
+    {
+      // text in → text out: DevDeck draws the boxes and options
+      id: "shout",
+      title: "Shout",
+      desc: "Turn text into CAPITALS with extra excitement",
+      icon: "zap",                  // see the icon list below
+      keywords: "uppercase caps loud",
+      level: 1,                     // 1 Essentials, 2 Standard (default), 3 Complete
+      sample: "hello there",
+      options: [{ id: "bangs", label: "Exclamation marks", type: "number", default: 1, min: 0 }],
+      transform: (input, { bangs }) => input.toUpperCase() + "!".repeat(bangs),
+    },
+    {
+      // your own screen
+      id: "letter-count",
+      title: "Letter Count",
+      desc: "Count letters as you type",
+      component: function LetterCount() {
+        const [text, setText] = sdk.useState(sdk.takeHandoff("Type here"));
+        return sdk.h(sdk.React.Fragment, null,
+          sdk.h(sdk.Panel, { label: "Text", value: text, onChange: setText, rows: 6, mono: false }),
+          sdk.h("div", { className: "big-answer" }, `${[...text].length} characters`));
+      },
+    },
+  ],
+});
+```
+
+`sdk` contains everything from the plugin kit (table below) plus `React`, `h`, `Fragment`, `useState`,
+`useEffect`, `useMemo` and `useRef`. A complete example is
+[`public/plugin-examples/word-tools.js`](https://github.com/ezin-rev/devdeck/blob/main/public/plugin-examples/word-tools.js).
+
+To share it, put the file online — e.g. in a GitHub repository — and give people its **Raw** address.
+
+## Built-in plugins (a folder in `src/plugins/`)
+
+Each built-in plugin is a folder in `src/plugins/` with two files:
 
 ```
 src/plugins/

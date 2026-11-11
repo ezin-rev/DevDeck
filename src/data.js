@@ -261,3 +261,20 @@ export const ALL_TOOLS = GROUPS.flatMap((g) =>
   g.tools.map((t) => ({ ...t, group: g, path: `/${g.id}/${t.id}`, level: t.pluginLevel || levelOf(t.id), words: `${SEARCH_WORDS[t.id] || ""}${t.pluginWords ? ` ${t.pluginWords} plugin` : ""}${T[t.id] ? " devops ops infrastructure" : ""}` }))
 );
 
+// Plugins installed by the visitor (Settings → Plugins → Install) are added while the app starts.
+// Returns an error message, or "" when the tools were added.
+export function registerPluginTools(manifest) {
+  const taken = new Set(ALL_TOOLS.filter((t) => t.group.id === "plugins").map((t) => t.id));
+  const clash = manifest.tools.find((t) => taken.has(t.id));
+  if (clash) return `A tool called “${clash.id}” already exists — another plugin uses that id.`;
+  let group = GROUPS.find((g) => g.id === "plugins");
+  if (!group) { group = { id: "plugins", title: "Plugins", tab: "Plugins", icon: Puzzle, tone: "violet", tools: [] }; GROUPS.push(group); }
+  for (const t of manifest.tools) {
+    const tool = { id: t.id, short: t.short || t.title, title: t.title, desc: t.desc || "", icon: PLUGIN_ICONS[t.icon] || Puzzle, plugin: manifest.id, pluginLevel: t.level, pluginWords: t.keywords || "" };
+    group.tools.push(tool);
+    ALL_TOOLS.push({ ...tool, group, path: `/plugins/${t.id}`, level: t.level || 2, words: `${t.keywords || ""} plugin` });
+  }
+  PLUGINS.push(manifest);
+  return "";
+}
+

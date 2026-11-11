@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isDesktop } from "./desktop.js";
 
 /* Colour themes. `fx` = "soft" (flat, no glow) or "vivid" (glow + gradients). Swatches are for the picker only. */
 export const THEMES = [
@@ -93,7 +94,10 @@ export const LAYOUT_PRESETS = [
 
 export const presetFor = (prefs) => LAYOUT_PRESETS.find((p) => LAYOUT_KEYS.every((k) => p.set[k] === prefs[k]));
 
-export const DEFAULTS = { palette: "contrast", mode: "dark", ...LAYOUT_PRESETS[0].set };
+// The website starts with "Modern web"; the desktop app (src-tauri) starts with the "Desktop app" layout.
+// (index.html applies the same default before the first paint.)
+export const DEFAULT_PRESET = LAYOUT_PRESETS.find((p) => p.id === (isDesktop ? "desktop" : "modern"));
+export const DEFAULTS = { palette: "contrast", mode: "dark", ...DEFAULT_PRESET.set };
 const KEY = "aurora-prefs-v2"; // v2: High Contrast became the default
 
 function load() {
@@ -124,7 +128,7 @@ export function usePrefs() {
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch {}
   }, [prefs, isDark]);
   const set = (key, value) => setPrefs((p) => ({ ...p, [key]: value }));
-  const reset = () => setPrefs((p) => ({ ...p, ...LAYOUT_PRESETS[0].set }));
+  const reset = () => setPrefs((p) => ({ ...p, ...DEFAULT_PRESET.set }));
   const applyPreset = (preset) => setPrefs((p) => ({ ...p, ...preset.set }));
   return { prefs, set, reset, applyPreset, isDark };
 }
